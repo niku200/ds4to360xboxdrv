@@ -1,0 +1,4 @@
+# This rule links the DualShock 4 Wireless Controller (VID 054c, PID 09cc)
+# to the ds4-xboxdrv.service when it's connected.
+# It uses the device name to ensure it's the main controller and not other DS4 sub-devices.
+SUBSYSTEM=="input", ATTRS{idVendor}=="054c", ATTRS{idProduct}=="09cc", ATTRS{name}=="Wireless Controller", TAG+="systemd", ENV{SYSTEMD_WANTS}="ds4-xboxdrv.service", MODE="0660", GROUP="input"
