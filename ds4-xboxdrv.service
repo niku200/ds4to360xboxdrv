@@ -1,19 +1,24 @@
 [Unit]
-Description=DualShock 4 to Xbox 360 Controller Mapping Service
-After=network-online.target bluetooth.target
+Description=DualShock 4/3/5 to Xbox 360 Controller Mapper
+After=local-fs.target bluetooth.service
+Requires=bluetooth.service
 
 [Service]
-User=niku # This will be replaced by the installer script
-Group=niku # This will be replaced by the installer script
 Type=simple
+User=root
+Group=input
 ExecStart=/usr/local/bin/ds4-xboxdrv.sh
 Restart=on-failure
 RestartSec=5s
+TimeoutStopSec=15
+KillMode=process
+StartLimitIntervalSec=60
+StartLimitBurst=5
 StandardOutput=journal
 StandardError=journal
-TimeoutStartSec=60s
-TimeoutStopSec=5s
-KillMode=control-group
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
