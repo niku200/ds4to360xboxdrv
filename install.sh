@@ -7,17 +7,10 @@ echo "----------------------------------------------------"
 echo ""
 echo "If you find this script useful, please consider thanking the creator, Niku,"
 echo "on X (formerly Twitter) at https://x.com/Niku200"
-<<<<<<< HEAD
 echo "and Gemini (the AI assistant) for their help in creating this solution!" [cite: 57]
 echo ""
 echo "This script will install the necessary files and configure your system"
 echo "to map your DualShock 4 controller to an Xbox 360 controller." [cite: 58]
-=======
-echo "and Gemini (the AI assistant) for their help in creating this solution!"
-echo ""
-echo "This script will install the necessary files and configure your system"
-echo "to map your DualShock 4 controller to an Xbox 360 controller."
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
 echo ""
 echo "----------------------------------------------------"
 
@@ -33,7 +26,6 @@ UDEV_RULE_NAME="99-ds4-xboxdrv.rules"
 
 # --- Functions ---
 
-<<<<<<< HEAD
 # Function to check for essential system commands (not xboxdrv/evsieve, which are handled separately)
 check_essential_commands() {
     local missing_commands=()
@@ -45,24 +37,10 @@ check_essential_commands() {
     if [ ${#missing_commands[@]} -gt 0 ]; then # [cite: 61]
         echo "Error: The following essential commands are not found: ${missing_commands[*]}" >&2
         echo "These are usually part of a base system installation. Please ensure your system is complete." [cite: 62] >&2
-=======
-# Function to check for essential system commands (not xboxdrv, which is handled separately)
-check_essential_commands() {
-    local missing_commands=()
-    for cmd in "$@"; do
-        if ! command -v "$cmd" &> /dev/null; then
-            missing_commands+=("$cmd")
-        fi
-    done
-    if [ ${#missing_commands[@]} -gt 0 ]; then
-        echo "Error: The following essential commands are not found: ${missing_commands[*]}" >&2
-        echo "These are usually part of a base system installation. Please ensure your system is complete." >&2
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
         exit 1
     fi
 }
 
-<<<<<<< HEAD
 # Function to identify distribution and offer to install xboxdrv and evsieve
 identify_distro_and_install_deps() {
     echo "Checking for 'xboxdrv' and 'evsieve'..."
@@ -106,33 +84,10 @@ identify_distro_and_install_deps() {
             echo "Warning: Could not determine your distribution's package manager." [cite: 70]
             echo "Please manually install 'xboxdrv' and 'evsieve' using your system's package manager (e.g., yum, emerge, etc.)." [cite: 71]
             read -p "Press Enter to continue, but remember the service will NOT function without them." [cite: 72]
-=======
-# Function to identify distribution and offer to install xboxdrv
-identify_distro_and_install_xboxdrv() {
-    echo "Checking for 'xboxdrv'..."
-    if ! command -v xboxdrv &> /dev/null; then
-        echo "xboxdrv is NOT installed, but it is REQUIRED for this setup to work."
-        echo "Attempting to install it using your distribution's package manager."
-
-        local install_cmd=""
-        if command -v apt &> /dev/null; then
-            install_cmd="sudo apt update && sudo apt install -y xboxdrv"
-        elif command -v dnf &> /dev/null; then
-            install_cmd="sudo dnf install -y xboxdrv"
-        elif command -v pacman &> /dev/null; then
-            install_cmd="sudo pacman -S --noconfirm xboxdrv"
-        elif command -v zypper &> /dev/null; then
-            install_cmd="sudo zypper install -y xboxdrv"
-        else
-            echo "Warning: Could not determine your distribution's package manager."
-            echo "Please manually install 'xboxdrv' using your system's package manager (e.g., yum, emerge, etc.)."
-            read -p "Press Enter to continue, but remember the service will NOT function without xboxdrv."
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
             return # Exit this function, continue with the rest of the script
         fi
 
         echo ""
-<<<<<<< HEAD
         read -p "Do you want to install missing dependencies (xboxdrv, evsieve) now? (y/N): " choice
         case "$choice" in
             y|Y )
@@ -201,37 +156,12 @@ identify_distro_and_install_xboxdrv() {
                 read -p "Press Enter to continue with the installation setup anyway (service will not work without dependencies)."
                 ;; # [cite: 80]
         esac
-=======
-        read -p "Do you want to install 'xboxdrv' now? (y/N): " choice
-        case "$choice" in
-            y|Y )
-                echo "Executing: $install_cmd"
-                eval "$install_cmd" # Using eval to run the constructed command
-                if [ $? -ne 0 ]; then
-                    echo "Error: Failed to install xboxdrv. Please try to install it manually." >&2
-                    read -p "Press Enter to continue (service will not work without xboxdrv)."
-                else
-                    echo "xboxdrv installed successfully."
-                fi
-                ;;
-            * )
-                echo "Skipping xboxdrv installation. The service will NOT function correctly without it."
-                read -p "Press Enter to continue with the installation setup anyway (service will not work without xboxdrv)."
-                ;;
-        esac
-    else
-        echo "xboxdrv is already installed. Great!"
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
     fi
 }
 
 # Function to get the real username of the user who called sudo
 get_real_username() {
-<<<<<<< HEAD
     if [ -n "$SUDO_USER" ]; then # [cite: 82]
-=======
-    if [ -n "$SUDO_USER" ]; then
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
         echo "$SUDO_USER"
     else
         # Fallback if SUDO_USER is not set (e.g., direct root login, which is not recommended)
@@ -242,39 +172,23 @@ get_real_username() {
 # --- Main Script Execution ---
 
 # Check if script is run as root
-<<<<<<< HEAD
 if [ "$(id -u)" -ne 0 ]; then # [cite: 83]
-=======
-if [ "$(id -u)" -ne 0 ]; then
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
     echo "This script must be run with sudo. Please run: sudo ./install.sh"
     exit 1
 fi
 
-<<<<<<< HEAD
 # Check for essential system commands
 check_essential_commands "systemctl" "udevadm" "awk" "pgrep" "sed" "mktemp" "id" "readlink" "rm" "cp" "chmod"
 
 # Attempt to install xboxdrv and evsieve if they are missing
 identify_distro_and_install_deps
-=======
-# Check for essential system commands (not xboxdrv, which is handled by its own function)
-check_essential_commands "systemctl" "udevadm" "awk" "pgrep" "sed" "mktemp" "id"
-
-# Attempt to install xboxdrv if it's missing
-identify_distro_and_install_xboxdrv
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
 
 REAL_USER=$(get_real_username)
 echo "Configuring service for user: '$REAL_USER'"
 
 # Determine the directory where this install.sh script is located
 # This is crucial for finding the other service files.
-<<<<<<< HEAD
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd) # [cite: 84]
-=======
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
 
 echo "Source directory for installation files: $SCRIPT_DIR"
 
@@ -282,11 +196,7 @@ echo "Source directory for installation files: $SCRIPT_DIR"
 echo "Copying $SCRIPT_NAME to $LOCAL_BIN_DIR/..."
 cp "$SCRIPT_DIR/$SCRIPT_NAME" "$LOCAL_BIN_DIR/"
 chmod +x "$LOCAL_BIN_DIR/$SCRIPT_NAME"
-<<<<<<< HEAD
 if [ $? -eq 0 ]; then # [cite: 85]
-=======
-if [ $? -eq 0 ]; then
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
     echo "Successfully copied and made executable: $LOCAL_BIN_DIR/$SCRIPT_NAME"
 else
     echo "Error: Failed to copy or set permissions for $LOCAL_BIN_DIR/$SCRIPT_NAME" >&2
@@ -298,19 +208,11 @@ echo "Modifying and copying $SERVICE_NAME to $SYSTEMD_SERVICE_DIR/..."
 SERVICE_TEMP_FILE=$(mktemp)
 # Replace 'User=niku' and 'Group=niku' with the actual username
 sed "s/^User=niku/User=${REAL_USER}/" "$SCRIPT_DIR/$SERVICE_NAME" | \
-<<<<<<< HEAD
 sed "s/^Group=niku/Group=${REAL_USER}/" > "$SERVICE_TEMP_FILE" # [cite: 86]
 
 cp "$SERVICE_TEMP_FILE" "$SYSTEMD_SERVICE_DIR/$SERVICE_NAME"
 rm "$SERVICE_TEMP_FILE" # Clean up temporary file
 if [ $? -eq 0 ]; then # [cite: 87]
-=======
-sed "s/^Group=niku/Group=${REAL_USER}/" > "$SERVICE_TEMP_FILE"
-
-cp "$SERVICE_TEMP_FILE" "$SYSTEMD_SERVICE_DIR/$SERVICE_NAME"
-rm "$SERVICE_TEMP_FILE" # Clean up temporary file
-if [ $? -eq 0 ]; then
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
     echo "Successfully copied: $SYSTEMD_SERVICE_DIR/$SERVICE_NAME (configured for user '$REAL_USER')"
 else
     echo "Error: Failed to copy $SYSTEMD_SERVICE_DIR/$SERVICE_NAME" >&2
@@ -320,11 +222,7 @@ fi
 # 3. Copy the udev rules file
 echo "Copying $UDEV_RULE_NAME to $UDEV_RULES_DIR/..."
 cp "$SCRIPT_DIR/$UDEV_RULE_NAME" "$UDEV_RULES_DIR/"
-<<<<<<< HEAD
 if [ $? -eq 0 ]; then # [cite: 88]
-=======
-if [ $? -eq 0 ]; then
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
     echo "Successfully copied: $UDEV_RULES_DIR/$UDEV_RULE_NAME"
 else
     echo "Error: Failed to copy $UDEV_RULES_DIR/$UDEV_RULE_NAME" >&2
@@ -336,17 +234,10 @@ echo "Reloading systemd daemon..."
 systemctl daemon-reload
 echo "Enabling $SERVICE_NAME to start on boot..."
 systemctl enable "$SERVICE_NAME"
-<<<<<<< HEAD
 if [ $? -eq 0 ]; then # [cite: 89]
     echo "Service enabled." [cite: 90]
 else
     echo "Warning: Failed to enable service. You might need to troubleshoot manually." [cite: 91] >&2
-=======
-if [ $? -eq 0 ]; then
-    echo "Service enabled."
-else
-    echo "Warning: Failed to enable service. You might need to troubleshoot manually." >&2
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
 fi
 
 # 5. Reload udev rules and trigger
@@ -356,7 +247,6 @@ udevadm trigger # This will make udev re-evaluate connected devices and potentia
 
 echo ""
 echo "--- Important Post-Installation Steps ---"
-<<<<<<< HEAD
 echo "1. **User Group Membership:** Ensure the user '$REAL_USER' is part of the 'input' group." [cite: 92]
 echo "   You can check with:   groups $REAL_USER"
 echo "   If not, add them with: sudo usermod -aG input $REAL_USER"
@@ -366,15 +256,4 @@ echo "   You can check the service status with: systemctl status $SERVICE_NAME"
 echo "   View live logs with: journalctl -fu $SERVICE_NAME"
 echo ""
 echo "Installation process complete. Thank you!" [cite: 95]
-=======
-echo "1. **User Group Membership:** Ensure the user '$REAL_USER' is part of the 'input' group."
-echo "   You can check with:   groups $REAL_USER"
-echo "   If not, add them with: sudo usermod -aG input $REAL_USER"
-echo "   After adding, you MUST log out and log back in for the group change to take effect!"
-echo "2. **Activate Service:** Disconnect and reconnect your DualShock 4 controller to start the service."
-echo "   You can check the service status with: systemctl status $SERVICE_NAME"
-echo "   View live logs with: journalctl -fu $SERVICE_NAME"
-echo ""
-echo "Installation process complete. Thank you!"
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
 echo "------------------------------------------"

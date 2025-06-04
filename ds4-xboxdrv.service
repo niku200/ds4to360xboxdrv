@@ -12,11 +12,6 @@ Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=15
 KillMode=process
-<<<<<<< HEAD
-=======
-StartLimitIntervalSec=60
-StartLimitBurst=5
->>>>>>> c84ad29ad3b8b4e757a4aa22a096ee2c7598cb55
 StandardOutput=journal
 StandardError=journal
 ProtectSystem=strict
