@@ -110,7 +110,7 @@ while true; do
   if ! kill -0 "$CURRENT_EVSIEVE_PID" 2>/dev/null; then
     [ -L "$VIRTUAL_LINK" ] && rm -f "$VIRTUAL_LINK"
     echo "$(date): Starting evsieve for $FULL_EVDEV_PATH..."
-    sudo evsieve --input "$FULL_EVDEV_PATH" grab --output create-link="$VIRTUAL_LINK" name="Evsieve DS4 Virtual" &
+    sudo evsieve --input "$FULL_EVDEV_PATH" grab ff --output create-link="$VIRTUAL_LINK" name="Evsieve DS4 Virtual" &
     CURRENT_EVSIEVE_PID=$!
     # Wait for symlink
     for i in {1..10}; do [ -L "$VIRTUAL_LINK" ] && break; sleep 0.5; done
