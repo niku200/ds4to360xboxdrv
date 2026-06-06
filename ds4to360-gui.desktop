@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=DS4 to Xbox 360
+Comment=Emulate Xbox 360 controller using DualShock 4
+Exec=ds4to360-gui
+Icon=input-gaming
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;Game;
