@@ -5,18 +5,30 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
-User=root
-Group=input
-ExecStart=/usr/local/bin/ds4-xboxdrv.sh
+ExecStart=/usr/bin/python3 /usr/share/ds4to360/backend.py
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=15
 KillMode=process
 StandardOutput=journal
 StandardError=journal
+
+# Security Hardening
+DynamicUser=yes
+User=_ds4to360
+Group=input
+RuntimeDirectory=ds4to360
+ConfigurationDirectory=ds4to360
+ReadWritePaths=/dev/input /dev/uinput
 ProtectSystem=strict
 ProtectHome=true
 NoNewPrivileges=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+MemoryDenyWriteExecute=true
 
 [Install]
 WantedBy=multi-user.target
