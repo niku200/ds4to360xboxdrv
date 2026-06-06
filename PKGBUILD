@@ -1,4 +1,4 @@
-# Maintainer: Your Name <youremail@example.com>
+# Maintainer: Pakrohk <pakrohk@gmail.com>
 pkgname=ds4to360xboxdrv
 pkgver=5.0.0
 pkgrel=1
