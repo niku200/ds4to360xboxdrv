@@ -15,8 +15,7 @@ StandardError=journal
 
 # Security Hardening
 DynamicUser=yes
-User=_ds4to360
-Group=input
+SupplementaryGroups=input
 RuntimeDirectory=ds4to360
 ConfigurationDirectory=ds4to360
 ReadWritePaths=/dev/input /dev/uinput

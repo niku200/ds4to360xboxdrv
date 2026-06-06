@@ -13,9 +13,16 @@ import shutil
 CONFIG_PATH = "/etc/ds4to360.conf"
 DEFAULT_CONFIG = {
     'controllers': {
+        # PS4
+        '054c:05c4': 'DualShock 4',
         '054c:09cc': 'DualShock 4',
-        '054c:0268': 'DualShock 3',
-        '054c:0ce6': 'DualSense'
+        '054c:0ba0': 'DualShock 4 (USB)',
+        '054c:0da6': 'DualShock 4 (USB)',
+        # PS5
+        '054c:0ce6': 'DualSense',
+        '054c:0df2': 'DualSense Edge',
+        # PS3
+        '054c:0268': 'DualShock 3'
     },
     'settings': {
         'rumble_gain': '15%',
@@ -88,7 +95,8 @@ class Backend:
     def is_steam_running(self):
         if self.config.getboolean('settings', 'steam_conflict_check', fallback=True):
             try:
-                for proc in ["steam", "steamwebhelper"]:
+                # Check more processes for Steam
+                for proc in ["steam", "steamwebhelper", "steam.sh"]:
                     if subprocess.run(["pgrep", "-x", proc], capture_output=True).returncode == 0:
                         return True
             except:
@@ -152,43 +160,47 @@ class Backend:
 
     def start_mapping(self, event, vid, pid, name):
         evdev_path = f"/dev/input/{event}"
-        self.log(f"Starting evsieve for {name} ({vid}:{pid}) at {evdev_path}...")
+        self.log(f"Starting mapping for {name} ({vid}:{pid}) at {evdev_path}...")
 
         evsieve_bin = shutil.which("evsieve")
-        if not evsieve_bin:
-            self.log("Error: evsieve not found in PATH")
+        xboxdrv_bin = shutil.which("xboxdrv")
+
+        if not xboxdrv_bin:
+            self.log("Error: xboxdrv not found")
             return
 
         try:
-            self.current_evsieve = subprocess.Popen([
-                evsieve_bin, "--input", evdev_path, "grab", "ff",
-                "--output", f"create-link={self.virtual_link}", "name=Evsieve DS4 Virtual"
-            ])
+            # Decide if we use evsieve
+            use_evsieve = evsieve_bin is not None
+            input_device = evdev_path
 
-            for _ in range(20):
-                if os.path.islink(self.virtual_link): break
-                time.sleep(0.5)
-            else:
-                self.log("Failed to create evsieve virtual link")
-                self.cleanup()
-                return
+            if use_evsieve:
+                self.log("Using evsieve for device grabbing")
+                self.current_evsieve = subprocess.Popen([
+                    evsieve_bin, "--input", evdev_path, "grab", "ff",
+                    "--output", f"create-link={self.virtual_link}", "name=Evsieve DS4 Virtual"
+                ])
 
-            vlink_target = os.path.realpath(self.virtual_link)
+                for _ in range(20):
+                    if os.path.islink(self.virtual_link): break
+                    time.sleep(0.5)
+                else:
+                    self.log("Failed to create evsieve virtual link, falling back to direct evdev")
+                    self.current_evsieve.terminate()
+                    self.current_evsieve = None
+                    use_evsieve = False
+
+                if use_evsieve:
+                    input_device = os.path.realpath(self.virtual_link)
 
             rumble = self.config.get('settings', 'rumble_gain', fallback='15%')
             axismap = self.config.get('mapping', 'axismap', fallback=DEFAULT_CONFIG['mapping']['axismap'])
             absmap = self.config.get('mapping', 'absmap', fallback=DEFAULT_CONFIG['mapping']['absmap'])
             keymap = self.config.get('mapping', 'keymap', fallback=DEFAULT_CONFIG['mapping']['keymap'])
 
-            xboxdrv_bin = shutil.which("xboxdrv")
-            if not xboxdrv_bin:
-                self.log("Error: xboxdrv not found in PATH")
-                self.cleanup()
-                return
-
             xboxdrv_cmd = [
                 xboxdrv_bin,
-                "--evdev", vlink_target,
+                "--evdev", input_device,
                 "--mimic-xpad",
                 "--silent", "--quiet",
                 "--force-feedback",
@@ -212,7 +224,7 @@ class Backend:
     def run(self):
         self.log("Backend started")
         while self.running:
-            self.config = self.load_config() # Reload config periodically
+            self.config = self.load_config()
             check_interval = self.config.getint('settings', 'check_interval', fallback=5)
 
             res = self.find_controller()
@@ -223,17 +235,29 @@ class Backend:
                 device_id = f"{vid}:{pid}:{event}"
 
                 if steam_running:
-                    if self.current_device: self.cleanup()
+                    if self.current_device:
+                        self.log("Steam detected, pausing mapping...")
+                        self.cleanup()
                     self.update_status(False, steam_blocking=True)
                 elif device_id != self.current_device:
-                    self.cleanup()
+                    if self.current_device:
+                        self.log("Device changed, restarting mapping...")
+                        self.cleanup()
                     self.start_mapping(event, vid, pid, name)
                 else:
-                    if (self.current_evsieve and self.current_evsieve.poll() is not None) or \
+                    # Auto-resume or Health check
+                    if not self.current_xboxdrv:
+                        self.log("Resuming mapping (Steam closed or device back)...")
+                        self.start_mapping(event, vid, pid, name)
+                    elif (self.current_evsieve and self.current_evsieve.poll() is not None) or \
                        (self.current_xboxdrv and self.current_xboxdrv.poll() is not None):
+                        self.log("Process died, restarting...")
                         self.cleanup()
+                        self.start_mapping(event, vid, pid, name)
             else:
-                if self.current_device: self.cleanup()
+                if self.current_device:
+                    self.log("Controller disconnected.")
+                    self.cleanup()
                 self.update_status(False, steam_blocking=steam_running)
 
             time.sleep(check_interval)

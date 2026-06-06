@@ -35,10 +35,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Main View
         main_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        main_page.set_margin_top(24)
-        main_page.set_margin_bottom(24)
-        main_page.set_margin_start(12)
-        main_page.set_margin_end(12)
+        main_page.set_margin_all(24)
 
         clamp = Adw.Clamp()
         clamp.set_child(main_page)
@@ -60,12 +57,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_row.add_suffix(self.service_switch)
         status_group.add(self.service_row)
 
+        self.restart_button = Gtk.Button(label="Restart Service")
+        self.restart_button.set_valign(Gtk.Align.CENTER)
+        self.restart_button.connect("clicked", self.on_restart_clicked)
+        self.service_row.add_suffix(self.restart_button)
+
         # Settings View
         settings_page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        settings_page.set_margin_top(24)
-        settings_page.set_margin_bottom(24)
-        settings_page.set_margin_start(12)
-        settings_page.set_margin_end(12)
+        settings_page.set_margin_all(24)
 
         settings_clamp = Adw.Clamp()
         settings_clamp.set_child(settings_page)
@@ -74,7 +73,7 @@ class MainWindow(Adw.ApplicationWindow):
         config_group = Adw.PreferencesGroup(title="General Settings")
         settings_page.append(config_group)
 
-        self.rumble_row = Adw.ActionRow(title="Rumble Gain", subtitle="Strength of force feedback")
+        self.rumble_row = Adw.ActionRow(title="Rumble Gain", subtitle="Strength of force feedback (e.g., 15%)")
         self.rumble_entry = Gtk.Entry()
         self.rumble_entry.set_valign(Gtk.Align.CENTER)
         self.rumble_row.add_suffix(self.rumble_entry)
@@ -117,6 +116,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.log_view = Gtk.TextView()
         self.log_view.set_editable(False)
         self.log_view.set_cursor_visible(False)
+        self.log_view.set_monospace(True)
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_child(self.log_view)
@@ -132,6 +132,10 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.timeout_add(2000, self.update_status)
         self.update_status()
         self.start_log_monitor()
+
+    def show_toast(self, message):
+        toast = Adw.Toast(title=message)
+        self.toast_overlay.add_toast(toast)
 
     def load_config(self):
         config = configparser.ConfigParser()
@@ -157,31 +161,38 @@ class MainWindow(Adw.ApplicationWindow):
         config['mapping']['absmap'] = self.absmap_entry.get_text()
         config['mapping']['keymap'] = self.keymap_entry.get_text()
 
+        tmp_path = "/tmp/ds4to360.conf"
         try:
-            with open("/tmp/ds4to360.conf", "w") as f:
+            with open(tmp_path, "w") as f:
                 config.write(f)
-            subprocess.run(["pkexec", "mv", "/tmp/ds4to360.conf", CONFIG_PATH], check=True)
-            self.toast_overlay.add_toast(Adw.Toast(title="Settings saved. Restart service to apply."))
+            # Use pkexec for safe privilege escalation
+            subprocess.run(["pkexec", "mv", tmp_path, CONFIG_PATH], check=True)
+            self.show_toast("Settings saved successfully")
         except Exception as e:
-            self.toast_overlay.add_toast(Adw.Toast(title=f"Failed to save: {e}"))
+            self.show_toast(f"Error saving settings: {e}")
 
     def update_status(self):
-        res = subprocess.run(["systemctl", "is-active", "ds4-xboxdrv.service"], capture_output=True, text=True)
-        is_active = res.stdout.strip() == "active"
-        self.service_switch.set_active(is_active)
+        try:
+            res = subprocess.run(["systemctl", "is-active", "ds4-xboxdrv.service"], capture_output=True, text=True)
+            is_active = res.stdout.strip() == "active"
+            # Prevent feedback loop by only setting if changed
+            if self.service_switch.get_active() != is_active:
+                self.service_switch.set_active(is_active)
+        except:
+            is_active = False
 
         if os.path.exists(STATUS_FILE):
             try:
                 with open(STATUS_FILE, "r") as f:
                     data = json.load(f)
                     if data.get("active"):
-                        self.status_row.set_subtitle(f"Emulating: {data.get('device')}")
+                        self.status_row.set_subtitle(f"Active: {data.get('device')}")
                         self.status_icon.set_from_icon_name("input-gaming-symbolic")
                     elif data.get("steam_blocking"):
                         self.status_row.set_subtitle("Blocked by Steam")
                         self.status_icon.set_from_icon_name("dialog-warning-symbolic")
                     else:
-                        self.status_row.set_subtitle("Disconnected")
+                        self.status_row.set_subtitle("Idle (Waiting for controller)")
                         self.status_icon.set_from_icon_name("prohibit-symbolic")
             except:
                 self.status_row.set_subtitle("Service Running")
@@ -192,24 +203,47 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def on_service_switch_toggle(self, switch, state):
+        # We check current state to avoid redundant calls
+        res = subprocess.run(["systemctl", "is-active", "ds4-xboxdrv.service"], capture_output=True, text=True)
+        current_state = res.stdout.strip() == "active"
+        if current_state == state: return False
+
         cmd = "start" if state else "stop"
         try:
             subprocess.run(["pkexec", "systemctl", cmd, "ds4-xboxdrv.service"], check=True)
-            return False
+            self.show_toast(f"Service {cmd}ed")
         except:
-            return True
+            # Revert switch if failed
+            switch.set_active(current_state)
+        return False
+
+    def on_restart_clicked(self, button):
+        try:
+            subprocess.run(["pkexec", "systemctl", "restart", "ds4-xboxdrv.service"], check=True)
+            self.show_toast("Service restarted")
+        except Exception as e:
+            self.show_toast(f"Failed to restart: {e}")
 
     def start_log_monitor(self):
         def monitor():
-            proc = subprocess.Popen(["journalctl", "-u", "ds4-xboxdrv.service", "-f", "-n", "20"],
-                                   stdout=subprocess.PIPE, text=True)
-            for line in iter(proc.stdout.readline, ""):
-                GLib.idle_add(self.append_log, line)
+            try:
+                proc = subprocess.Popen(["journalctl", "-u", "ds4-xboxdrv.service", "-f", "-n", "50"],
+                                       stdout=subprocess.PIPE, text=True)
+                for line in iter(proc.stdout.readline, ""):
+                    GLib.idle_add(self.append_log, line)
+            except:
+                pass
         threading.Thread(target=monitor, daemon=True).start()
 
     def append_log(self, text):
         buffer = self.log_view.get_buffer()
         buffer.insert(buffer.get_end_iter(), text)
+        if buffer.get_line_count() > 1000:
+            start = buffer.get_iter_at_line(0)
+            end = buffer.get_iter_at_line(100)
+            buffer.delete(start, end)
+
+        # Scroll to bottom
         adj = self.log_view.get_vadjustment()
         adj.set_value(adj.get_upper() - adj.get_page_size())
         return False

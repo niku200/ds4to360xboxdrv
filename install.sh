@@ -57,8 +57,12 @@ if [ ! -f "$CONFIG_PATH" ]; then
     cp ds4to360.conf.example "$CONFIG_PATH"
 fi
 
+echo "Reloading daemons..."
 systemctl daemon-reload
 udevadm control --reload-rules
 udevadm trigger
+
+echo "Enabling service..."
+systemctl enable ds4-xboxdrv.service
 
 echo "Installation complete. Launch the GUI with 'ds4to360-gui'."
