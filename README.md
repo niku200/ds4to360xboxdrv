@@ -12,15 +12,54 @@ Modernized and enhanced version of `ds4to360xboxdrv`. This utility emulates an X
 
 ## 🚀 Installation
 
-### Development (using Rye)
-If you have Rye installed:
+### Distribution Packages
+
+The project provides native packages for major Linux distributions. These packages handle all system dependencies and configuration automatically.
+
+#### Arch Linux
+You can build the package using the provided `PKGBUILD`:
 ```bash
-rye sync
-rye run ds4to360-gui
+makepkg -si
 ```
 
-### Manual Installation
-On most distributions, use the provided installation script:
+#### Debian / Ubuntu
+To build a `.deb` package:
+```bash
+sudo apt install debhelper python3-all python3-installer
+# If rye is installed and on PATH:
+dpkg-buildpackage -us -uc -b
+sudo apt install ./dist/packages/ds4to360xboxdrv_*.deb
+```
+
+#### Fedora / RHEL
+To build an `.rpm` package:
+```bash
+rpmbuild -ba ds4to360xboxdrv.spec
+```
+
+### Building from Source (using Rye)
+
+If you prefer to build the project manually or contribute to development:
+
+1.  **Install Rye:** Follow instructions at [rye.astral.sh](https://rye.astral.sh/).
+2.  **Clone and Build:**
+    ```bash
+    git clone https://github.com/Pakrohk/ds4to360xboxdrv
+    cd ds4to360xboxdrv
+    rye build --wheel
+    ```
+3.  **Install the Wheel:**
+    ```bash
+    pip install dist/*.whl
+    ```
+4.  **Run Development Version:**
+    ```bash
+    rye sync
+    rye run ds4to360-gui
+    ```
+
+### Legacy Manual Installation
+On distributions where native packages are not yet ready, use the provided installation script:
 ```bash
 sudo ./install.sh
 ```
