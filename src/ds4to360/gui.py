@@ -148,25 +148,17 @@ class MainWindow(Adw.ApplicationWindow):
             map_group.add(row)
 
         # Footer Actions
-        footer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        footer_box.set_margin_top(32)
-        footer_box.set_margin_bottom(32)
+        action_group = Adw.PreferencesGroup()
+        settings_page.add(action_group)
 
         save_btn = Gtk.Button(label="Save & Apply Settings")
         save_btn.add_css_class("suggested-action")
         save_btn.add_css_class("pill")
         save_btn.set_halign(Gtk.Align.CENTER)
+        save_btn.set_margin_top(24)
         save_btn.set_size_request(250, -1)
         save_btn.connect("clicked", self.on_save_clicked)
-        footer_box.append(save_btn)
-
-        settings_page.set_child(footer_box)
-
-        # Actually Libadwaita PreferencesPage uses a different way to append non-group widgets
-        # but let's stick to groups for better look
-        footer_group = Adw.PreferencesGroup()
-        footer_group.add(save_btn)
-        settings_page.add(footer_group)
+        action_group.add(save_btn)
 
         self.view_stack.add_titled_with_icon(settings_page, "settings", "Settings", "emblem-system-symbolic")
 
@@ -189,7 +181,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.tester_grid.set_column_spacing(12)
         self.tester_grid.set_row_spacing(12)
         self.tester_grid.set_halign(Gtk.Align.CENTER)
-        # In a real app, we'd use python-evdev to read the virtual device and update these
         box.append(self.tester_grid)
 
         page.set_child(box)

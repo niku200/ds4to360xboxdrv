@@ -1,12 +1,12 @@
 # Maintainer: Pakrohk <pakrohk@gmail.com>
 pkgname=ds4to360xboxdrv
-pkgver=5.0.0
+pkgver=5.1.0
 pkgrel=1
-pkgdesc="Modernized DualShock 4 to Xbox 360 controller emulator using xboxdrv and evsieve with GTK4 GUI"
+pkgdesc="Modernized DualShock 4/3 and DualSense to Xbox 360 controller emulator using xboxdrv and evsieve with GTK4/Libadwaita GUI"
 arch=('any')
 url="https://github.com/Pakrohk/ds4to360xboxdrv"
 license=('MIT')
-depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'systemd' 'xboxdrv' 'polkit')
+depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'systemd' 'xboxdrv' 'polkit' 'python-evdev')
 optdepends=('evsieve: For better device grabbing and exclusive control')
 backup=('etc/ds4to360.conf')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
@@ -15,15 +15,29 @@ sha256sums=('SKIP')
 package() {
   cd "${pkgname}-${pkgver}"
 
-  # Install backend and GUI
-  install -Dm755 src/backend.py "${pkgdir}/usr/share/ds4to360/backend.py"
-  install -Dm755 src/gui.py "${pkgdir}/usr/share/ds4to360/gui.py"
+  # Install package source
+  install -d "${pkgdir}/usr/share/ds4to360"
+  cp -r src/ds4to360 "${pkgdir}/usr/share/ds4to360/"
 
+  # Install wrapper scripts
   install -d "${pkgdir}/usr/bin"
-  ln -s /usr/share/ds4to360/gui.py "${pkgdir}/usr/bin/ds4to360-gui"
+  cat <<EOF > "${pkgdir}/usr/bin/ds4to360-gui"
+#!/bin/bash
+export PYTHONPATH=\$PYTHONPATH:/usr/share/ds4to360
+exec python3 -m ds4to360.gui "\$@"
+EOF
+  chmod +x "${pkgdir}/usr/bin/ds4to360-gui"
+
+  cat <<EOF > "${pkgdir}/usr/bin/ds4to360-backend"
+#!/bin/bash
+export PYTHONPATH=\$PYTHONPATH:/usr/share/ds4to360
+exec python3 -m ds4to360.backend "\$@"
+EOF
+  chmod +x "${pkgdir}/usr/bin/ds4to360-backend"
 
   # Install systemd service
   install -Dm644 ds4-xboxdrv.service "${pkgdir}/usr/lib/systemd/system/ds4-xboxdrv.service"
+  sed -i "s|ExecStart=.*|ExecStart=/usr/bin/ds4to360-backend|" "${pkgdir}/usr/lib/systemd/system/ds4-xboxdrv.service"
 
   # Install udev rules
   install -Dm644 99-ds4-xboxdrv.rules "${pkgdir}/usr/lib/udev/rules.d/99-ds4-xboxdrv.rules"
