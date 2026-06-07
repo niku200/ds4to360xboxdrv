@@ -3,7 +3,7 @@
 # --- Thanks & Introduction ---
 echo "----------------------------------------------------"
 echo "--- DualShock 4 to Xbox 360 Controller Installer ---"
-echo "---               Version 5.0.0                  ---"
+echo "---               Version 5.1.0                  ---"
 echo "----------------------------------------------------"
 
 # --- Configuration Variables ---
@@ -22,13 +22,13 @@ identify_distro_and_install_deps() {
     if [ "$xboxdrv_installed" = "false" ] || [ "$evsieve_installed" = "false" ]; then
         echo "Missing dependencies. Attempting to install..."
         if command -v pacman &> /dev/null; then
-            sudo pacman -S --noconfirm xboxdrv evsieve python-gobject gtk4 libadwaita
+            sudo pacman -S --noconfirm xboxdrv evsieve python-gobject gtk4 libadwaita python-evdev
         elif command -v dnf &> /dev/null; then
-            sudo dnf install -y xboxdrv evsieve python3-gobject gtk4 libadwaita
+            sudo dnf install -y xboxdrv evsieve python3-gobject gtk4 libadwaita python3-evdev
         elif command -v apt &> /dev/null; then
-            sudo apt update && sudo apt install -y xboxdrv evsieve python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+            sudo apt update && sudo apt install -y xboxdrv evsieve python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev
         else
-            echo "Please manually install: xboxdrv, evsieve, python-gobject, gtk4, libadwaita"
+            echo "Please manually install: xboxdrv, evsieve, python-gobject, gtk4, libadwaita, python-evdev"
         fi
     fi
 }
@@ -43,13 +43,25 @@ fi
 identify_distro_and_install_deps
 
 mkdir -p "$SHARE_DIR"
-cp src/backend.py "$SHARE_DIR/"
-cp src/gui.py "$SHARE_DIR/"
-chmod +x "$SHARE_DIR/gui.py"
+cp -r src/ds4to360 "$SHARE_DIR/"
 
-ln -sf "$SHARE_DIR/gui.py" "/usr/bin/ds4to360-gui"
+cat <<EOF > /usr/bin/ds4to360-gui
+#!/bin/bash
+export PYTHONPATH=\$PYTHONPATH:$SHARE_DIR
+python3 -m ds4to360.gui "\$@"
+EOF
+chmod +x /usr/bin/ds4to360-gui
+
+cat <<EOF > /usr/bin/ds4to360-backend
+#!/bin/bash
+export PYTHONPATH=\$PYTHONPATH:$SHARE_DIR
+python3 -m ds4to360.backend "\$@"
+EOF
+chmod +x /usr/bin/ds4to360-backend
 
 cp ds4-xboxdrv.service "$SYSTEMD_SERVICE_DIR/"
+sed -i "s|ExecStart=.*|ExecStart=/usr/bin/ds4to360-backend|" "$SYSTEMD_SERVICE_DIR/ds4-xboxdrv.service"
+
 cp 99-ds4-xboxdrv.rules "$UDEV_RULES_DIR/"
 cp ds4to360-gui.desktop "/usr/share/applications/"
 
