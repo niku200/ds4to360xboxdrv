@@ -6,37 +6,30 @@ pkgdesc="Modernized DualShock 4/3 and DualSense to Xbox 360 controller emulator 
 arch=('any')
 url="https://github.com/Pakrohk/ds4to360xboxdrv"
 license=('MIT')
-depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'systemd' 'xboxdrv' 'polkit' 'python-evdev')
+depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'systemd' 'xboxdrv' 'polkit')
+makedepends=('rye' 'python-installer')
 optdepends=('evsieve: For better device grabbing and exclusive control')
 backup=('etc/ds4to360.conf')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
+build() {
+  cd "${pkgname}-${pkgver}"
+  rye build --wheel --clean
+}
+
 package() {
   cd "${pkgname}-${pkgver}"
 
-  # Install package source
-  install -d "${pkgdir}/usr/share/ds4to360"
-  cp -r src/ds4to360 "${pkgdir}/usr/share/ds4to360/"
+  # Install the wheel
+  python -m installer --destdir="$pkgdir" --prefix=/usr dist/*.whl
 
-  # Install wrapper scripts
-  install -d "${pkgdir}/usr/bin"
-  cat <<EOF > "${pkgdir}/usr/bin/ds4to360-gui"
-#!/bin/bash
-export PYTHONPATH=\$PYTHONPATH:/usr/share/ds4to360
-exec python3 -m ds4to360.gui "\$@"
-EOF
-  chmod +x "${pkgdir}/usr/bin/ds4to360-gui"
-
-  cat <<EOF > "${pkgdir}/usr/bin/ds4to360-backend"
-#!/bin/bash
-export PYTHONPATH=\$PYTHONPATH:/usr/share/ds4to360
-exec python3 -m ds4to360.backend "\$@"
-EOF
-  chmod +x "${pkgdir}/usr/bin/ds4to360-backend"
+  # Fix shebangs in /usr/bin scripts to use system python3
+  sed -i '1s|#!.*|#!/usr/bin/python3|' "$pkgdir"/usr/bin/ds4to360-*
 
   # Install systemd service
   install -Dm644 ds4-xboxdrv.service "${pkgdir}/usr/lib/systemd/system/ds4-xboxdrv.service"
+  # The wheel installation provides ds4to360-backend script in /usr/bin
   sed -i "s|ExecStart=.*|ExecStart=/usr/bin/ds4to360-backend|" "${pkgdir}/usr/lib/systemd/system/ds4-xboxdrv.service"
 
   # Install udev rules

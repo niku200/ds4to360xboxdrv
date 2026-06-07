@@ -25,4 +25,6 @@ packages = ["src/ds4to360"]
 
 [tool.rye]
 managed = true
-dev-dependencies = []
+dev-dependencies = [
+    "installer>=1.0.1",
+]
