@@ -11,6 +11,7 @@ PNP bridges the gap between PlayStation hardware and the Linux input system by c
 
 ## Features
 
+- **X11 & Wayland Support**: Fully compatible with both display servers, including explicit support for KDE Plasma 5 (Wayland).
 - **Multi-Controller Support**: Simultaneously map multiple PlayStation controllers to unique Xbox 360 instances.
 - **Hotplug Support**: Automatically detects and maps controllers when they are connected (USB or Bluetooth).
 - **Modern GUI**: A beautiful GTK4/Libadwaita interface for monitoring status, logs, and adjusting settings.
@@ -54,8 +55,21 @@ sudo pacman -S xboxdrv evsieve python-gobject gtk4 libadwaita python-evdev
 ### From AUR (Arch Linux)
 If you are on Arch Linux, you can install PNP from the AUR:
 ```bash
+# Using an AUR helper like yay
 yay -S pnp
+
+# Or manually
+git clone https://aur.archlinux.org/pnp.git
+cd pnp
+makepkg -si
 ```
+
+## Display server compatibility
+PNP is designed to work across different Linux display servers:
+- **X11**: Fully supported on all desktop environments.
+- **Wayland**: Supported on GNOME and KDE Plasma (5.27+ recommended).
+  - On **KDE Plasma Wayland**, the GUI automatically optimizes its backend for the best experience.
+  - If you encounter issues where the window is invisible on Plasma, try setting `GDK_BACKEND=x11 pnp-gui` as a temporary workaround.
 
 ### From .deb Package (Debian/Ubuntu)
 1. Download the latest `.deb` package from the [Releases](https://github.com/Pakrohk/pnp/releases) page, or find it in `dist-packages/` if you built it yourself.
