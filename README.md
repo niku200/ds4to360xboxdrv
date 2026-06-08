@@ -18,6 +18,7 @@ PNP bridges the gap between PlayStation hardware and the Linux input system by c
 - **Systemd Integration**: Runs as a background service for seamless "set and forget" operation.
 - **Exclusive Access**: Uses `evsieve --grab` to hide the original PlayStation device from games, avoiding "double input" issues.
 - **Custom Mapping**: Fine-tune axis and button translations globally or per-controller.
+- **Reliability**: Built-in watchdog monitor that automatically restarts backend processes if they fail.
 
 ## Requirements
 
@@ -54,29 +55,27 @@ sudo pacman -S xboxdrv evsieve python-gobject gtk4 libadwaita python-evdev
 If you are on Arch Linux, you can install PNP from the AUR:
 ```bash
 yay -S pnp
-# or
-yay -S pnp-bin
 ```
 
 ### From .deb Package (Debian/Ubuntu)
-1. Download the latest `.deb` package from the [Releases](https://github.com/pakrohk/pnp/releases) page.
+1. Download the latest `.deb` package from the [Releases](https://github.com/Pakrohk/pnp/releases) page.
 2. Install it using `dpkg`:
    ```bash
-   sudo dpkg -i pnp_6.0.0_amd64.deb
+   sudo dpkg -i pnp_5.2.0_amd64.deb
    sudo apt install -f  # Fix any missing dependencies
    ```
 
 ### From .rpm Package (Fedora/openSUSE)
-1. Download the latest `.rpm` package from the [Releases](https://github.com/pakrohk/pnp/releases) page.
+1. Download the latest `.rpm` package from the [Releases](https://github.com/Pakrohk/pnp/releases) page.
 2. Install it using `dnf`:
    ```bash
-   sudo dnf install pnp-6.0.0-1.x86_64.rpm
+   sudo dnf install pnp-5.2.0-1.x86_64.rpm
    ```
 
 ### From Source
 1. Clone the repository:
    ```bash
-   git clone https://github.com/pakrohk/pnp.git
+   git clone https://github.com/Pakrohk/pnp.git
    cd pnp
    ```
 2. (Optional) Use [Rye](https://rye-up.com/) for development:
@@ -90,9 +89,11 @@ yay -S pnp-bin
    ```
 
 ## Building Packages Yourself
-PNP includes a script to build native packages for multiple distributions:
+PNP includes a script to build native packages for multiple distributions using native tools or Docker:
 ```bash
 ./build-all-packages.sh --all
+# Or with docker
+./build-all-packages.sh --docker --all
 ```
 This will generate DEB, RPM, and Arch packages in the `dist-packages/` directory.
 
@@ -169,6 +170,8 @@ We welcome contributions!
 PNP is released under the **MIT License**.
 
 ## Acknowledgements
-- Original logic based on the `ds4to360` project.
-- Modernized and rebranded by **pakrohk**.
-- Special thanks to contributors **niku200** and **Jules**.
+PNP is a collaborative effort. We would like to thank the original authors and all contributors who made this project possible:
+- **niku200**: For the original `ds4to360` concept and implementation.
+- **Jules**: For significant architecture improvements, multi-controller support, and rebranding.
+- **pakrohk**: For project maintenance, GTK4 modernization, and packaging.
+- And all other contributors who provided bug reports and suggestions.

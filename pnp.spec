@@ -1,5 +1,5 @@
 Name:           pnp
-Version:        6.0.0
+Version:        5.2.0
 Release:        1%{?dist}
 Summary:        PNP (PS NOT PS) – PlayStation to Xbox controller emulator for Linux
 
@@ -57,6 +57,6 @@ install -Dm644 pnp.conf.example %{buildroot}%{_sysconfdir}/pnp/pnp.conf
 %config(noreplace) %{_sysconfdir}/pnp/pnp.conf
 
 %changelog
-* Fri Feb 28 2025 pakrohk <pakrohk@gmail.com> - 6.0.0-1
+* Fri Feb 28 2025 pakrohk <pakrohk@gmail.com> - 5.2.0-1
 - Rebranded to PNP (PS NOT PS)
-- Bumped version to 6.0.0
+- Stabilized multi-controller support and watchdog

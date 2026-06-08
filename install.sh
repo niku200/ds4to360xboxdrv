@@ -3,7 +3,7 @@
 # --- Thanks & Introduction ---
 echo "----------------------------------------------------"
 echo "---       PNP – PS NOT PS Controller Mapper      ---"
-echo "---               Version 6.0.0                  ---"
+echo "---               Version 5.2.0                  ---"
 echo "----------------------------------------------------"
 
 # --- Configuration Variables ---

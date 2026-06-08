@@ -1,6 +1,6 @@
 # Maintainer: pakrohk <pakrohk@gmail.com>
 pkgname=pnp
-pkgver=6.0.0
+pkgver=5.2.0
 pkgrel=1
 pkgdesc="PNP (PS NOT PS) – PlayStation to Xbox controller emulator for Linux using xboxdrv and evsieve with GTK4/Libadwaita GUI"
 arch=('any')

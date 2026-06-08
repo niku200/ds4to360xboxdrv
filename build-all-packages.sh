@@ -4,7 +4,7 @@
 # Automates the creation of DEB, RPM, and Pacman packages.
 # Supports native and Docker-based builds.
 
-VERSION="6.0.0"
+VERSION="5.2.0"
 OUTPUT_DIR="dist-packages"
 mkdir -p "$OUTPUT_DIR"
 

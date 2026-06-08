@@ -1,6 +1,6 @@
 [project]
 name = "pnp"
-version = "6.0.0"
+version = "5.2.0"
 description = "PNP (PS NOT PS) – PlayStation to Xbox controller emulator for Linux"
 authors = [
     { name = "pakrohk", email = "pakrohk@gmail.com" }

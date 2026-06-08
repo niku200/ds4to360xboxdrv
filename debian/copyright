@@ -1,9 +1,13 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: ds4to360xboxdrv
-Source: https://github.com/Pakrohk/ds4to360xboxdrv
+Upstream-Name: pnp
+Source: https://github.com/Pakrohk/pnp
 
 Files: *
-Copyright: 2025 Jules
+Copyright: 2025 pakrohk <pakrohk@gmail.com>
+License: MIT
+
+Files: debian/*
+Copyright: 2025 pakrohk <pakrohk@gmail.com>
 License: MIT
 
 License: MIT

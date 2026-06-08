@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: pakrohk <pakrohk@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3-all, rye, python3-installer
 Standards-Version: 4.6.2
-Homepage: https://github.com/pakrohk/pnp
+Homepage: https://github.com/Pakrohk/pnp
 
 Package: pnp
 Architecture: any
