@@ -16,6 +16,9 @@ if wayland_display and is_plasma and not os.environ.get('GDK_BACKEND'):
 os.environ['GDK_DPI_SCALE'] = '1'
 os.environ['GDK_SCALE'] = '1'
 
+import gi
+gi.require_version('Gtk', '4.0')
+gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib, Gio
 from pnp.gui.main_window import Application
 from pnp.core.manager import ControllerManager

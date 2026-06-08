@@ -11,7 +11,7 @@ USER_CONFIG_DIR = os.path.expanduser("~/.config/pnp/controllers/")
 class ConfigManager:
     def __init__(self, config_path=DEFAULT_CONFIG_PATH):
         self.config_path = config_path
-        self.config = configparser.ConfigParser()
+        self.config = configparser.ConfigParser(interpolation=None)
         self.load_defaults()
         if os.path.exists(self.config_path):
             self.config.read(self.config_path)

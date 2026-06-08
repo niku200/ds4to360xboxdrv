@@ -191,7 +191,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(page_box)
-        self.view_stack.add_titled_with_icon(scroll, "status", "Status", "dialog-information-symbolic")
+        self.view_stack.add_titled_with_icon(scroll, "status", "Status", "network-transmit-receive-symbolic")
 
     def setup_settings_page(self):
         self.settings_page = Adw.PreferencesPage()
@@ -263,7 +263,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.manager.stop_all()
 
     def load_config(self):
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         if os.path.exists(CONFIG_PATH):
             config.read(CONFIG_PATH)
         elif os.path.exists(LEGACY_CONFIG_PATH):
@@ -276,7 +276,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.keymap_entry.set_text(config.get('mapping', 'keymap', fallback='BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide'))
 
     def on_save_clicked(self, button):
-        config = configparser.ConfigParser()
+        config = configparser.ConfigParser(interpolation=None)
         if os.path.exists(CONFIG_PATH):
             config.read(CONFIG_PATH)
         elif os.path.exists(LEGACY_CONFIG_PATH):
