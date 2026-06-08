@@ -33,9 +33,15 @@ build_arch() {
     echo -e "${GREEN}Building Arch Linux package (pkg.tar.zst)...${NC}"
     if [ "$USE_DOCKER" = true ]; then
         docker run --rm -v "$(pwd):/app" -w /app archlinux:latest bash -c "
-            pacman -Syu --noconfirm base-devel rye python-installer
+            pacman -Syu --noconfirm base-devel python-installer curl
+            # Install rye manually since it is in AUR
+            curl -sSf https://rye.astral.sh/get | RYE_INSTALL_OPTION=\"--yes\" bash
+            source \$HOME/.rye/env
             cp dist/${PKGNAME}-${VERSION}.tar.gz .
-            sudo -u bin makepkg -f
+            # makepkg cannot be run as root
+            useradd -m builduser
+            chown -R builduser:builduser .
+            sudo -u builduser bash -c 'source \$HOME/.rye/env && makepkg -f'
             mv *.pkg.tar.zst dist/packages/
         "
     elif command -v makepkg &> /dev/null; then
