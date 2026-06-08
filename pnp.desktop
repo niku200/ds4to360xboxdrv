@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=DS4 to Xbox 360
+Name=PNP
 Comment=Emulate Xbox 360 controller using DualShock 4
-Exec=ds4to360-gui
+Exec=pnp-gui
 Icon=input-gaming
 Terminal=false
 Type=Application

@@ -1,9 +1,10 @@
 import sys
 import shutil
 import logging
+import subprocess
 from gi.repository import Gtk, Adw, GLib, Gio
-from ds4to360.gui.main_window import Application
-from ds4to360.core.manager import ControllerManager
+from pnp.gui.main_window import Application
+from pnp.core.manager import ControllerManager
 
 # Configure logging
 # For GUI, logging to stderr is usually enough as it can be captured if run from terminal
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def is_service_active():
     try:
-        res = subprocess.run(["systemctl", "is-active", "ds4-xboxdrv.service"], capture_output=True, text=True)
+        res = subprocess.run(["systemctl", "is-active", "pnp.service"], capture_output=True, text=True)
         return res.stdout.strip() == "active"
     except:
         return False

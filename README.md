@@ -1,108 +1,174 @@
-# DualShock 4 to Xbox 360 Controller Mapper for Linux (v5.1.1)
+# PNP – PS NOT PS
 
-Modernized and enhanced version of `ds4to360xboxdrv`. This utility emulates an Xbox 360 controller using Sony DualShock 3, 4, and DualSense controllers, providing seamless integration with Linux games.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![AUR version](https://img.shields.io/aur/version/pnp.svg)](https://aur.archlinux.org/packages/pnp/)
 
-## ✨ New in v5.1.1
+**PNP (PS NOT PS)** is a modernized PlayStation to Xbox controller emulator for Linux. It allows you to use your DualShock 4, DualShock 3, or DualSense (PS5) controllers in any game or application that expects an Xbox 360 controller.
 
-*   **Build Reliability:** Added support for PyPI mirrors (Tsinghua, Aliyun) in `pyproject.toml` to fix network timeouts.
-*   **GUI Hardening:** Fixed GTK4 `set_margin_all` crashes and modernized theme management with `AdwStyleManager`.
-*   **Dependency Checks:** Added runtime verification for `xboxdrv` and `evsieve`.
-*   **Improved Logging:** GUI and Backend now log to `/tmp/ds4to360-gui.log` and `/tmp/ds4to360-backend.log`.
-*   **Rye Support:** Managed with [Rye](https://rye-up.com/) for better Python dependency management.
-*   **Multi-Controller Support:** Simultaneously map multiple Sony controllers.
+## Overview
 
-## 🚀 Installation
+PNP bridges the gap between PlayStation hardware and the Linux input system by creating a virtual Xbox 360 controller. It uses `evsieve` for robust device grabbing and `xboxdrv` for high-performance emulation. Whether you're playing via Steam, Lutris, or standalone games, PNP ensures your PlayStation controller "just works."
 
-### Distribution Packages
+## Features
 
-The project provides native packages for major Linux distributions. These packages handle all system dependencies and configuration automatically.
+- **Multi-Controller Support**: Simultaneously map multiple PlayStation controllers to unique Xbox 360 instances.
+- **Hotplug Support**: Automatically detects and maps controllers when they are connected (USB or Bluetooth).
+- **Modern GUI**: A beautiful GTK4/Libadwaita interface for monitoring status, logs, and adjusting settings.
+- **Steam Auto-Pause**: Automatically pauses emulation when Steam is running to prevent input double-detection (Steam has its own PS controller support).
+- **Systemd Integration**: Runs as a background service for seamless "set and forget" operation.
+- **Exclusive Access**: Uses `evsieve --grab` to hide the original PlayStation device from games, avoiding "double input" issues.
+- **Custom Mapping**: Fine-tune axis and button translations globally or per-controller.
 
-#### Arch Linux
-You can build the package using the provided `PKGBUILD`:
+## Requirements
+
+The following system dependencies are required:
+
+- `xboxdrv`: The core Xbox 360 controller emulator.
+- `evsieve`: Used for device grabbing and event routing.
+- `python3`: Minimum version 3.10.
+- `gtk4` & `libadwaita`: For the graphical user interface.
+- `systemd`: For service management.
+- `python3-evdev` & `python3-pyudev`: Python bindings for input and device monitoring.
+
+### Installation of Dependencies
+
+**Debian/Ubuntu**:
 ```bash
-makepkg -si
+sudo apt update
+sudo apt install xboxdrv evsieve python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev python3-venv
 ```
 
-#### Debian / Ubuntu
-To build a `.deb` package:
+**Fedora**:
 ```bash
-sudo apt install debhelper python3-all python3-installer
-# If rye is installed and on PATH:
-dpkg-buildpackage -us -uc -b
-sudo apt install ./dist/packages/ds4to360xboxdrv_*.deb
+sudo dnf install xboxdrv evsieve python3-gobject gtk4 libadwaita python3-evdev
 ```
 
-#### Fedora / RHEL
-To build an `.rpm` package:
+**Arch Linux**:
 ```bash
-rpmbuild -ba ds4to360xboxdrv.spec
+sudo pacman -S xboxdrv evsieve python-gobject gtk4 libadwaita python-evdev
 ```
 
-### Building from Source (using Rye)
+## Installation
 
-If you prefer to build the project manually or contribute to development:
-
-1.  **Install Rye:** Follow instructions at [rye.astral.sh](https://rye.astral.sh/).
-2.  **Clone and Build:**
-    ```bash
-    git clone https://github.com/Pakrohk/ds4to360xboxdrv
-    cd ds4to360xboxdrv
-    # If you experience network timeouts, Rye will automatically try mirrors.
-    # You can also set RYE_INDEX_TIMEOUT=30
-    rye build --wheel
-    ```
-3.  **Offline / Mirror Building:**
-    If you are in a restricted network, you can use the helper script:
-    ```bash
-    ./scripts/build-offline.sh
-    ```
-4.  **Install the Wheel:**
-    ```bash
-    pip install dist/*.whl
-    ```
-4.  **Run Development Version:**
-    ```bash
-    rye sync
-    rye run ds4to360-gui
-    ```
-
-### System Dependencies
-
-This application requires the following system binaries:
-- `xboxdrv`
-- `evsieve`
-
-You can check if they are installed by running:
+### From AUR (Arch Linux)
+If you are on Arch Linux, you can install PNP from the AUR:
 ```bash
-./scripts/check-deps.py
+yay -S pnp
+# or
+yay -S pnp-bin
 ```
 
-#### Installation on Distributions:
-- **Arch Linux:** `sudo pacman -S xboxdrv` (evsieve via AUR).
-- **Ubuntu/Debian:** `sudo apt install xboxdrv` (evsieve must be built from source).
-- **Fedora:** `sudo dnf install xboxdrv` (from RPM Fusion).
+### From .deb Package (Debian/Ubuntu)
+1. Download the latest `.deb` package from the [Releases](https://github.com/pakrohk/pnp/releases) page.
+2. Install it using `dpkg`:
+   ```bash
+   sudo dpkg -i pnp_6.0.0_amd64.deb
+   sudo apt install -f  # Fix any missing dependencies
+   ```
 
-### Legacy Manual Installation
-On distributions where native packages are not yet ready, use the provided installation script:
+### From .rpm Package (Fedora/openSUSE)
+1. Download the latest `.rpm` package from the [Releases](https://github.com/pakrohk/pnp/releases) page.
+2. Install it using `dnf`:
+   ```bash
+   sudo dnf install pnp-6.0.0-1.x86_64.rpm
+   ```
+
+### From Source
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/pakrohk/pnp.git
+   cd pnp
+   ```
+2. (Optional) Use [Rye](https://rye-up.com/) for development:
+   ```bash
+   rye sync
+   rye build
+   ```
+3. Use the included installation script:
+   ```bash
+   sudo ./install.sh
+   ```
+
+## Building Packages Yourself
+PNP includes a script to build native packages for multiple distributions:
 ```bash
-sudo ./install.sh
+./build-all-packages.sh --all
 ```
-*Note: The script will install system dependencies.*
+This will generate DEB, RPM, and Arch packages in the `dist-packages/` directory.
 
-## 🎮 Usage
-1.  Launch **"DS4 to Xbox 360"** from your application menu or run `ds4to360-gui`.
-2.  Connect your controller via USB or Bluetooth.
-3.  The service will automatically detect the controller and start emulation.
+## Configuration
 
-## ⚙️ Configuration
-The application can be configured via the GUI's **Settings** tab.
-Manual configuration is stored in `/etc/ds4to360.conf`.
+PNP looks for its global configuration at `/etc/pnp/pnp.conf`. You can also create per-controller profiles in `~/.config/pnp/controllers/[serial].conf`.
 
-## 🗑️ Uninstallation
-To remove the application:
+### Example `pnp.conf`:
+```ini
+[settings]
+rumble_gain = 15%
+steam_conflict_check = true
+
+[mapping]
+axismap = -y1=y1,-y2=y2
+absmap = ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y,ABS_X=X1,ABS_Y=Y1,ABS_RX=X2,ABS_RY=Y2,ABS_Z=LT,ABS_RZ=RT
+keymap = BTN_SOUTH=A,BTN_EAST=B,BTN_NORTH=Y,BTN_WEST=X,BTN_START=start,BTN_MODE=guide,BTN_SELECT=back,BTN_TL=LB,BTN_TR=RB,BTN_TL2=LT,BTN_TR2=RT,BTN_THUMBL=TL,BTN_THUMBR=TR
+```
+
+## Usage
+
+### Starting the GUI
+Launch the management interface from your application menu or via terminal:
+```bash
+pnp-gui
+```
+
+### Managing the Service
+PNP runs as a system service. You can manage it with `systemctl`:
+```bash
+# Start the service
+sudo systemctl start pnp
+
+# Enable start on boot
+sudo systemctl enable pnp
+
+# Check status
+sudo systemctl status pnp
+
+# View logs
+journalctl -u pnp.service -f
+```
+
+## Troubleshooting
+
+- **Controller not detected**:
+  - Ensure the controller is paired correctly via Bluetooth or connected via USB.
+  - Run `sudo udevadm trigger` to force udev to re-process the device.
+  - Check `dmesg` to see if the kernel sees the device.
+- **`xboxdrv` not found**: Ensure `xboxdrv` is installed and available in your PATH.
+- **GUI won't start**:
+  - Run `pnp-gui` from a terminal to see any traceback or error messages.
+  - Verify you have `gtk4` and `libadwaita` installed.
+- **Steam interference**: PNP is designed to pause when Steam is running. If you find inputs are still doubling, try manually stopping PNP with `sudo systemctl stop pnp` while playing on Steam.
+- **Network issues during build**: If `rye build` fails due to network issues, try setting a different `INDEX_URL` or verify your internet connection.
+
+## Uninstall
+To remove PNP and all its configuration:
 ```bash
 sudo ./uninstall.sh
+# or if installed via package manager:
+sudo apt remove pnp
+sudo dnf remove pnp
+sudo pacman -R pnp
 ```
 
-## 📄 License
-This project is licensed under the MIT License.
+## Contributing
+We welcome contributions!
+1. Set up your development environment with [Rye](https://rye-up.com/): `rye sync`.
+2. Run from source for testing: `PYTHONPATH=src python3 -m pnp.gui`.
+3. Submit a Pull Request with your improvements.
+
+## License
+PNP is released under the **MIT License**.
+
+## Acknowledgements
+- Original logic based on the `ds4to360` project.
+- Modernized and rebranded by **pakrohk**.
+- Special thanks to contributors **niku200** and **Jules**.

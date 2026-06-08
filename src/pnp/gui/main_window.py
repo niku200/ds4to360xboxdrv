@@ -6,13 +6,13 @@ import os
 import configparser
 import logging
 from gi.repository import Gtk, Adw, GLib, Gio
-from ds4to360.gui.controller_widget import ControllerWidget
+from pnp.gui.controller_widget import ControllerWidget
 
 logger = logging.getLogger(__name__)
 
-STATUS_FILE = "/run/ds4to360/status.json"
-CONFIG_DIR = "/etc/ds4to360"
-CONFIG_PATH = "/etc/ds4to360/ds4to360.conf"
+STATUS_FILE = "/run/pnp/status.json"
+CONFIG_DIR = "/etc/pnp"
+CONFIG_PATH = "/etc/pnp/pnp.conf"
 LEGACY_CONFIG_PATH = "/etc/ds4to360.conf"
 
 class MainWindow(Adw.ApplicationWindow):
@@ -21,7 +21,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.manager = manager
         self.is_observer = manager is None
 
-        self.set_title("DS4 to Xbox 360")
+        self.set_title("PNP – PS NOT PS")
         self.set_default_size(900, 700)
 
         # Style Manager for dark theme
@@ -71,7 +71,7 @@ class MainWindow(Adw.ApplicationWindow):
         page_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         self.status_page = Adw.StatusPage(
-            title="Sony Controller Mapper",
+            title="PNP Controller Mapper",
             description="Manage your DualShock and DualSense controllers.",
             icon_name="input-gaming-symbolic"
         )
@@ -187,7 +187,7 @@ class MainWindow(Adw.ApplicationWindow):
         config['mapping']['absmap'] = self.absmap_entry.get_text()
         config['mapping']['keymap'] = self.keymap_entry.get_text()
 
-        tmp_path = f"/tmp/ds4to360-{os.getuid()}.conf"
+        tmp_path = f"/tmp/pnp-{os.getuid()}.conf"
         try:
             with open(tmp_path, "w") as f:
                 config.write(f)
@@ -254,7 +254,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.log_monitor_active = True
         def monitor():
             try:
-                self.log_proc = subprocess.Popen(["journalctl", "-u", "ds4-xboxdrv.service", "-f", "-n", "100"],
+                self.log_proc = subprocess.Popen(["journalctl", "-u", "pnp.service", "-f", "-n", "100"],
                                        stdout=subprocess.PIPE, text=True)
                 for line in iter(self.log_proc.stdout.readline, ""):
                     if not self.log_monitor_active:
@@ -272,7 +272,7 @@ class MainWindow(Adw.ApplicationWindow):
 
 class Application(Adw.Application):
     def __init__(self, manager):
-        super().__init__(application_id="io.github.ds4to360.gui", flags=Gio.ApplicationFlags.FLAGS_NONE)
+        super().__init__(application_id="io.github.pakrohk.pnp", flags=Gio.ApplicationFlags.FLAGS_NONE)
         self.manager = manager
         self.missing_deps = []
 

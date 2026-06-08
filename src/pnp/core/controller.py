@@ -2,7 +2,7 @@ import os
 import logging
 import time
 from gi.repository import GObject, GLib
-from ds4to360.services.process_runner import ProcessRunner
+from pnp.services.process_runner import ProcessRunner
 
 logger = logging.getLogger(__name__)
 

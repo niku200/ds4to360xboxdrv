@@ -4,9 +4,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CONFIG_PATH = "/etc/ds4to360/ds4to360.conf"
+DEFAULT_CONFIG_PATH = "/etc/pnp/pnp.conf"
 LEGACY_CONFIG_PATH = "/etc/ds4to360.conf"
-USER_CONFIG_DIR = os.path.expanduser("~/.config/ds4to360/controllers/")
+USER_CONFIG_DIR = os.path.expanduser("~/.config/pnp/controllers/")
 
 class ConfigManager:
     def __init__(self, config_path=DEFAULT_CONFIG_PATH):

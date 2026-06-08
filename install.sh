@@ -2,16 +2,16 @@
 
 # --- Thanks & Introduction ---
 echo "----------------------------------------------------"
-echo "--- DualShock 4 to Xbox 360 Controller Installer ---"
-echo "---               Version 5.1.0                  ---"
+echo "---       PNP – PS NOT PS Controller Mapper      ---"
+echo "---               Version 6.0.0                  ---"
 echo "----------------------------------------------------"
 
 # --- Configuration Variables ---
 UDEV_RULES_DIR="/etc/udev/rules.d"
 SYSTEMD_SERVICE_DIR="/etc/systemd/system"
-SHARE_DIR="/usr/share/ds4to360"
-CONFIG_DIR="/etc/ds4to360"
-CONFIG_PATH="/etc/ds4to360/ds4to360.conf"
+SHARE_DIR="/usr/share/pnp"
+CONFIG_DIR="/etc/pnp"
+CONFIG_PATH="/etc/pnp/pnp.conf"
 
 # --- Functions ---
 
@@ -41,7 +41,7 @@ identify_distro_and_install_deps
 
 echo "Setting up application directory: $SHARE_DIR"
 mkdir -p "$SHARE_DIR"
-cp -r src/ds4to360 "$SHARE_DIR/"
+cp -r src/pnp "$SHARE_DIR/"
 
 # Create a virtual environment to avoid PEP 668 issues on modern distros (Debian 12+, Fedora, etc)
 echo "Setting up Python virtual environment..."
@@ -51,31 +51,31 @@ python3 -m venv --system-site-packages "$SHARE_DIR/venv"
 
 # Create robust wrapper scripts
 echo "Installing wrapper scripts..."
-cat <<EOF > /usr/bin/ds4to360-gui
+cat <<EOF > /usr/bin/pnp-gui
 #!/bin/bash
 export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
-exec "$SHARE_DIR/venv/bin/python3" -m ds4to360.gui "\$@"
+exec "$SHARE_DIR/venv/bin/python3" -m pnp.gui "\$@"
 EOF
-chmod +x /usr/bin/ds4to360-gui
+chmod +x /usr/bin/pnp-gui
 
-cat <<EOF > /usr/bin/ds4to360-backend
+cat <<EOF > /usr/bin/pnp-backend
 #!/bin/bash
 export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
-exec "$SHARE_DIR/venv/bin/python3" -m ds4to360.backend "\$@"
+exec "$SHARE_DIR/venv/bin/python3" -m pnp.backend "\$@"
 EOF
-chmod +x /usr/bin/ds4to360-backend
+chmod +x /usr/bin/pnp-backend
 
 # Install system components
 echo "Installing system components..."
-cp ds4-xboxdrv.service "$SYSTEMD_SERVICE_DIR/"
-# Service file already uses /usr/bin/ds4to360-backend
+cp pnp.service "$SYSTEMD_SERVICE_DIR/"
+sed -i "s|ExecStart=.*|ExecStart=/usr/bin/pnp-backend|" "$SYSTEMD_SERVICE_DIR/pnp.service"
 
-cp 99-ds4-xboxdrv.rules "$UDEV_RULES_DIR/"
-cp ds4to360-gui.desktop "/usr/share/applications/"
+cp 99-pnp.rules "$UDEV_RULES_DIR/"
+cp pnp.desktop "/usr/share/applications/"
 
 mkdir -p "$CONFIG_DIR"
 if [ ! -f "$CONFIG_PATH" ]; then
-    cp ds4to360.conf.example "$CONFIG_PATH"
+    cp pnp.conf.example "$CONFIG_PATH"
 fi
 
 echo "Reloading daemons..."
@@ -84,8 +84,8 @@ udevadm control --reload-rules
 udevadm trigger
 
 echo "Enabling service..."
-systemctl enable ds4-xboxdrv.service
+systemctl enable pnp.service
 
 echo "----------------------------------------------------"
-echo "Installation complete. Launch the GUI with 'ds4to360-gui'."
+echo "Installation complete. Launch the GUI with 'pnp-gui'."
 echo "----------------------------------------------------"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "----------------------------------------------------"
-echo "--- DualShock 4 to Xbox 360 Controller Uninstaller ---"
+echo "--- PNP – PS NOT PS Controller Uninstaller ---"
 echo "----------------------------------------------------"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -9,7 +9,7 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-SERVICE_NAME="ds4-xboxdrv.service"
+SERVICE_NAME="pnp.service"
 
 echo "Stopping and disabling service..."
 systemctl stop "$SERVICE_NAME" 2>/dev/null
@@ -18,11 +18,11 @@ systemctl disable "$SERVICE_NAME" 2>/dev/null
 echo "Removing files..."
 rm -f /usr/lib/systemd/system/$SERVICE_NAME
 rm -f /etc/systemd/system/$SERVICE_NAME
-rm -f /etc/udev/rules.d/99-ds4-xboxdrv.rules
-rm -f /usr/share/applications/ds4to360-gui.desktop
-rm -f /usr/bin/ds4to360-gui
-rm -f /usr/bin/ds4to360-backend
-rm -rf /usr/share/ds4to360
+rm -f /etc/udev/rules.d/99-pnp.rules
+rm -f /usr/share/applications/pnp.desktop
+rm -f /usr/bin/pnp-gui
+rm -f /usr/bin/pnp-backend
+rm -rf /usr/share/pnp
 
 echo "Reloading daemons..."
 systemctl daemon-reload

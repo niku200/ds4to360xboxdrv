@@ -1,10 +1,10 @@
 import json
 import os
 import logging
-from gi.repository import GObject
-from ds4to360.core.controller import Controller
-from ds4to360.core.device_monitor import DeviceMonitor
-from ds4to360.services.config_manager import ConfigManager
+from gi.repository import GObject, GLib
+from pnp.core.controller import Controller
+from pnp.core.device_monitor import DeviceMonitor
+from pnp.services.config_manager import ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ class ControllerManager(GObject.Object):
         'controller-list-changed': (GObject.SignalFlags.RUN_FIRST, None, ()),
     }
 
-    STATUS_FILE = "/run/ds4to360/status.json"
+    STATUS_FILE = "/run/pnp/status.json"
 
     def __init__(self, write_status=False):
         GObject.Object.__init__(self)
