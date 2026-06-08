@@ -1,6 +1,6 @@
 # Maintainer: Pakrohk <pakrohk@gmail.com>
 pkgname=ds4to360xboxdrv
-pkgver=5.1.0
+pkgver=5.1.1
 pkgrel=1
 pkgdesc="Modernized DualShock 4/3 and DualSense to Xbox 360 controller emulator using xboxdrv and evsieve with GTK4/Libadwaita GUI"
 arch=('any')

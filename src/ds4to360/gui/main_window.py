@@ -4,8 +4,11 @@ import threading
 import json
 import os
 import configparser
+import logging
 from gi.repository import Gtk, Adw, GLib, Gio
 from ds4to360.gui.controller_widget import ControllerWidget
+
+logger = logging.getLogger(__name__)
 
 STATUS_FILE = "/run/ds4to360/status.json"
 CONFIG_PATH = "/etc/ds4to360.conf"
@@ -18,6 +21,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.set_title("DS4 to Xbox 360")
         self.set_default_size(900, 700)
+
+        # Style Manager for dark theme
+        self.style_manager = Adw.StyleManager.get_default()
+        self.style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
 
         # Main Layout
         self.toolbar_view = Adw.ToolbarView()
@@ -127,7 +134,11 @@ class MainWindow(Adw.ApplicationWindow):
 
     def setup_logs_page(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.log_view = Gtk.TextView(editable=False, monospace=True, margin_all=12)
+        self.log_view = Gtk.TextView(editable=False, monospace=True)
+        self.log_view.set_margin_start(12)
+        self.log_view.set_margin_end(12)
+        self.log_view.set_margin_top(12)
+        self.log_view.set_margin_bottom(12)
         self.log_view.add_css_class("card")
 
         scroll = Gtk.ScrolledWindow(vexpand=True)
@@ -167,6 +178,7 @@ class MainWindow(Adw.ApplicationWindow):
             subprocess.run(["pkexec", "mv", tmp_path, CONFIG_PATH], check=True)
             self.show_toast("Settings saved. Restart service to apply.")
         except Exception as e:
+            logger.error(f"Error saving config: {e}")
             self.show_toast(f"Error saving: {e}")
 
     def show_toast(self, message):
@@ -204,7 +216,9 @@ class MainWindow(Adw.ApplicationWindow):
                 for name in controllers:
                     row = Adw.ActionRow(title=name, subtitle="Managed by system service")
                     row.add_prefix(Gtk.Image.new_from_icon_name("input-gaming-symbolic"))
-                    badge = Gtk.Label(label="Running", css_classes=["success", "pill"])
+                    badge = Gtk.Label(label="Running")
+                    badge.add_css_class("success")
+                    badge.add_css_class("pill")
                     row.add_suffix(badge)
                     self.controllers_group.add(row)
 
@@ -214,7 +228,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self.status_page.set_title(f"{len(controllers)} Controller(s) Active")
 
         except Exception as e:
-            print(f"Error reading status: {e}")
+            logger.error(f"Error reading status file: {e}")
 
         return True
 
@@ -239,7 +253,27 @@ class Application(Adw.Application):
     def __init__(self, manager):
         super().__init__(application_id="io.github.ds4to360.gui", flags=Gio.ApplicationFlags.FLAGS_NONE)
         self.manager = manager
+        self.missing_deps = []
 
     def do_activate(self):
-        win = MainWindow(self.manager, application=self)
-        win.present()
+        try:
+            win = MainWindow(self.manager, application=self)
+            win.present()
+
+            if self.missing_deps:
+                msg = f"Missing system dependencies: {', '.join(self.missing_deps)}. Please install them for the application to function correctly."
+                toast = Adw.Toast(title=msg)
+                toast.set_timeout(10)
+                win.toast_overlay.add_toast(toast)
+        except Exception as e:
+            logger.critical(f"Failed to activate application: {e}", exc_info=True)
+            # Show a fallback error dialog if possible
+            dialog = Gtk.MessageDialog(
+                transient_for=None,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text="Critical Error",
+                secondary_text=f"Failed to start the application: {e}\nCheck /tmp/ds4to360-gui.log for details."
+            )
+            dialog.connect("response", lambda d, r: d.destroy())
+            dialog.show()

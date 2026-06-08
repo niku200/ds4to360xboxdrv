@@ -1,5 +1,5 @@
 Name:           ds4to360xboxdrv
-Version:        5.1.0
+Version:        5.1.1
 Release:        1%{?dist}
 Summary:        DualShock 4/3 and DualSense to Xbox 360 Controller Mapper
 
@@ -55,5 +55,7 @@ install -Dm644 ds4to360.conf.example %{buildroot}%{_sysconfdir}/ds4to360.conf
 %config(noreplace) %{_sysconfdir}/ds4to360.conf
 
 %changelog
-* Wed Feb 26 2025 Jules <jules@example.com> - 5.1.0-1
-- Initial release
+* Thu Feb 27 2025 Pakrohk <pakrohk@gmail.com> - 5.1.1-1
+- Bug-fix and hardening release
+* Wed Feb 26 2025 Pakrohk <pakrohk@gmail.com> - 5.1.0-1
+- Initial multi-controller release
