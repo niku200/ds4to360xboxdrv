@@ -1,4 +1,4 @@
-from gi.repository import Gtk, Adw, GObject
+from gi.repository import Gtk, Adw, GObject, GLib
 
 class ControllerWidget(Adw.ActionRow):
     def __init__(self, controller):
