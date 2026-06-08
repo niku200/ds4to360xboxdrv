@@ -15,6 +15,8 @@ Requires:       python3-gobject
 Requires:       gtk4
 Requires:       libadwaita
 Requires:       systemd
+Requires:       python3-evdev
+Requires:       python3-pyudev
 
 %description
 ds4to360xboxdrv is a tool to emulate an Xbox 360 controller on Linux using
