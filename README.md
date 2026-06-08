@@ -89,7 +89,7 @@ yay -S pnp
    ```
 
 ## Building Packages Yourself
-PNP includes a script to build native packages for multiple distributions using native tools or Docker:
+PNP includes a script to build native packages for multiple distributions using native tools or Docker. The script automatically prepares a local source tarball so that packages can be built even before the code is pushed to GitHub:
 ```bash
 ./build-all-packages.sh --all
 # Or with docker

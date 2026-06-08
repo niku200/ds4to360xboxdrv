@@ -14,7 +14,7 @@ source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz"
         "99-pnp.rules"
         "pnp.desktop"
         "pnp.conf.example")
-sha256sums=('SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 build() {
   cd "${pkgname}-${pkgver}"
