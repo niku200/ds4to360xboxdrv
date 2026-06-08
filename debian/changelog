@@ -4,7 +4,7 @@ pnp (5.2.0-1) unstable; urgency=low
   * Stabilized multi-controller support and watchdog
   * Modernized GTK4 UI with Libadwaita
 
- -- pakrohk <pakrohk@gmail.com>  Fri, 28 Feb 2025 12:00:00 +0000
+ -- pakrohk <pakrohk@gmail.com>  Mon, 08 Jun 2026 12:00:00 +0000
 
 ds4to360xboxdrv (5.1.1-1) unstable; urgency=low
 
