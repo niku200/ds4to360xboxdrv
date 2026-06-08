@@ -1,7 +1,21 @@
+import os
 import sys
 import shutil
 import logging
 import subprocess
+
+# Wayland / X11 compatibility fixes
+wayland_display = os.environ.get('WAYLAND_DISPLAY')
+is_plasma = 'plasma' in os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
+
+if wayland_display and is_plasma and not os.environ.get('GDK_BACKEND'):
+    # Try Wayland first – GTK4 works well on Plasma 5.27+
+    os.environ['GDK_BACKEND'] = 'wayland'
+
+# Disable GDK internal scaling overrides to let the compositor handle it
+os.environ['GDK_DPI_SCALE'] = '1'
+os.environ['GDK_SCALE'] = '1'
+
 from gi.repository import Gtk, Adw, GLib, Gio
 from pnp.gui.main_window import Application
 from pnp.core.manager import ControllerManager

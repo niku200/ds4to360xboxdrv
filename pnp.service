@@ -6,6 +6,8 @@ Requires=bluetooth.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/pnp-backend
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_RUNTIME_DIR=%t
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=15

@@ -7,7 +7,7 @@ arch=('any')
 url="https://github.com/pakrohk/pnp"
 license=('MIT')
 depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'systemd' 'xboxdrv' 'evsieve' 'polkit' 'python-evdev' 'python-pyudev')
-makedepends=('rye' 'python-installer')
+makedepends=('rye' 'python-installer' 'python-build')
 backup=('etc/pnp/pnp.conf')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz"
         "pnp.service"
