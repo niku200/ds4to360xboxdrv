@@ -29,6 +29,22 @@ class ControllerManager(GObject.Object):
     def start(self):
         self.monitor.start()
         self._update_status_file()
+        GLib.timeout_add(5000, self._check_controller_processes)
+
+    def _check_controller_processes(self):
+        changed = False
+        for path, controller in list(self.controllers.items()):
+            if controller.is_active:
+                if (controller.evsieve_proc and not controller.evsieve_proc.is_running()) or \
+                   (controller.xboxdrv_proc and not controller.xboxdrv_proc.is_running()):
+                    logger.warning(f"Controller processes for {controller.name} died unexpectedly. Restarting.")
+                    controller.stop()
+                    if not self.steam_paused:
+                        controller.start()
+                    changed = True
+        if changed:
+            self._update_status_file()
+        return True
 
     def _on_controller_added(self, monitor, path, name, serial):
         if path not in self.controllers:

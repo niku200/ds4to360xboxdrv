@@ -5,7 +5,7 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/share/ds4to360/backend.py
+ExecStart=/usr/bin/ds4to360-backend
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=15

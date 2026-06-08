@@ -21,6 +21,7 @@ rm -f /etc/systemd/system/$SERVICE_NAME
 rm -f /etc/udev/rules.d/99-ds4-xboxdrv.rules
 rm -f /usr/share/applications/ds4to360-gui.desktop
 rm -f /usr/bin/ds4to360-gui
+rm -f /usr/bin/ds4to360-backend
 rm -rf /usr/share/ds4to360
 
 echo "Reloading daemons..."

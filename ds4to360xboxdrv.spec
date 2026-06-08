@@ -41,7 +41,7 @@ sed -i "s|ExecStart=.*|ExecStart=%{_bindir}/ds4to360-backend|" %{buildroot}%{_un
 
 install -Dm644 99-ds4-xboxdrv.rules %{buildroot}%{_udevrulesdir}/99-ds4-xboxdrv.rules
 install -Dm644 ds4to360-gui.desktop %{buildroot}%{_datadir}/applications/ds4to360-gui.desktop
-install -Dm644 ds4to360.conf.example %{buildroot}%{_sysconfdir}/ds4to360.conf
+install -Dm644 ds4to360.conf.example %{buildroot}%{_sysconfdir}/ds4to360/ds4to360.conf
 
 %files
 %license LICENSE
@@ -52,7 +52,8 @@ install -Dm644 ds4to360.conf.example %{buildroot}%{_sysconfdir}/ds4to360.conf
 %{_unitdir}/ds4-xboxdrv.service
 %{_udevrulesdir}/99-ds4-xboxdrv.rules
 %{_datadir}/applications/ds4to360-gui.desktop
-%config(noreplace) %{_sysconfdir}/ds4to360.conf
+%dir %{_sysconfdir}/ds4to360
+%config(noreplace) %{_sysconfdir}/ds4to360/ds4to360.conf
 
 %changelog
 * Thu Feb 27 2025 Pakrohk <pakrohk@gmail.com> - 5.1.1-1

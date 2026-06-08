@@ -4,7 +4,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CONFIG_PATH = "/etc/ds4to360.conf"
+DEFAULT_CONFIG_PATH = "/etc/ds4to360/ds4to360.conf"
+LEGACY_CONFIG_PATH = "/etc/ds4to360.conf"
 USER_CONFIG_DIR = os.path.expanduser("~/.config/ds4to360/controllers/")
 
 class ConfigManager:
@@ -14,6 +15,8 @@ class ConfigManager:
         self.load_defaults()
         if os.path.exists(self.config_path):
             self.config.read(self.config_path)
+        elif os.path.exists(LEGACY_CONFIG_PATH):
+            self.config.read(LEGACY_CONFIG_PATH)
 
     def load_defaults(self):
         if 'settings' not in self.config:
@@ -39,8 +42,11 @@ class ConfigManager:
     def save_global_config(self, settings_dict, mapping_dict):
         self.config['settings'].update(settings_dict)
         self.config['mapping'].update(mapping_dict)
-        # In a real environment, this might need pkexec to write to /etc
+
+        # We handle saving in the GUI using pkexec,
+        # but this method might be called by the backend (unlikely for global config).
         try:
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
             with open(self.config_path, "w") as f:
                 self.config.write(f)
         except Exception as e:

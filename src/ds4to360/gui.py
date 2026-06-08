@@ -6,11 +6,12 @@ from ds4to360.gui.main_window import Application
 from ds4to360.core.manager import ControllerManager
 
 # Configure logging
+# For GUI, logging to stderr is usually enough as it can be captured if run from terminal
+# or viewed in journal if launched via desktop entry (sometimes).
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("/tmp/ds4to360-gui.log"),
         logging.StreamHandler()
     ]
 )

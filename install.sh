@@ -9,8 +9,9 @@ echo "----------------------------------------------------"
 # --- Configuration Variables ---
 UDEV_RULES_DIR="/etc/udev/rules.d"
 SYSTEMD_SERVICE_DIR="/etc/systemd/system"
-SHARE_DIR="/opt/ds4to360"
-CONFIG_PATH="/etc/ds4to360.conf"
+SHARE_DIR="/usr/share/ds4to360"
+CONFIG_DIR="/etc/ds4to360"
+CONFIG_PATH="/etc/ds4to360/ds4to360.conf"
 
 # --- Functions ---
 
@@ -67,11 +68,12 @@ chmod +x /usr/bin/ds4to360-backend
 # Install system components
 echo "Installing system components..."
 cp ds4-xboxdrv.service "$SYSTEMD_SERVICE_DIR/"
-sed -i "s|ExecStart=.*|ExecStart=/usr/bin/ds4to360-backend|" "$SYSTEMD_SERVICE_DIR/ds4-xboxdrv.service"
+# Service file already uses /usr/bin/ds4to360-backend
 
 cp 99-ds4-xboxdrv.rules "$UDEV_RULES_DIR/"
 cp ds4to360-gui.desktop "/usr/share/applications/"
 
+mkdir -p "$CONFIG_DIR"
 if [ ! -f "$CONFIG_PATH" ]; then
     cp ds4to360.conf.example "$CONFIG_PATH"
 fi

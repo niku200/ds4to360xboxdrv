@@ -1,7 +1,7 @@
 import os
 import logging
 import time
-from gi.repository import GObject
+from gi.repository import GObject, GLib
 from ds4to360.services.process_runner import ProcessRunner
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,9 @@ class Controller(GObject.Object):
         if self.is_active:
             return
 
+        self.is_active = True
+        self.emit('status-changed', True)
+
         evsieve_link = f"/dev/input/evsieve_{os.path.basename(self.device_path)}"
 
         self.evsieve_proc = ProcessRunner(
@@ -33,15 +36,28 @@ class Controller(GObject.Object):
         )
         self.evsieve_proc.start()
 
-        # Wait for the virtual device link to be created
-        retries = 10
-        while retries > 0 and not os.path.exists(evsieve_link):
-            time.sleep(0.2)
-            retries -= 1
+        # Wait for the virtual device link to be created asynchronously
+        self._retry_count = 15
+        GLib.timeout_add(200, self._check_evsieve_link, evsieve_link)
 
-        if not os.path.exists(evsieve_link):
+    def _check_evsieve_link(self, evsieve_link):
+        if not self.is_active:
+            return False
+
+        if os.path.exists(evsieve_link):
+            self._start_xboxdrv(evsieve_link)
+            return False # Stop timeout
+
+        self._retry_count -= 1
+        if self._retry_count <= 0:
             logger.error(f"Timed out waiting for evsieve link: {evsieve_link}")
-            self.evsieve_proc.stop()
+            self.stop()
+            return False
+
+        return True # Continue timeout
+
+    def _start_xboxdrv(self, evsieve_link):
+        if not self.is_active:
             return
 
         # Get mapping from config
@@ -58,25 +74,28 @@ class Controller(GObject.Object):
         self.xboxdrv_proc = ProcessRunner(f"xboxdrv-{self.serial}", xboxdrv_cmd)
         self.xboxdrv_proc.start()
 
-        self.is_active = True
-        self.emit('status-changed', True)
-
     def stop(self):
         if not self.is_active:
+            # Still try to clean up just in case
+            self._cleanup()
             return
 
+        self.is_active = False
+        self._cleanup()
+        self.emit('status-changed', False)
+
+    def _cleanup(self):
         if self.xboxdrv_proc:
             self.xboxdrv_proc.stop()
+            self.xboxdrv_proc = None
         if self.evsieve_proc:
             self.evsieve_proc.stop()
+            self.evsieve_proc = None
 
         # Clean up link if exists
         evsieve_link = f"/dev/input/evsieve_{os.path.basename(self.device_path)}"
         if os.path.exists(evsieve_link):
             try:
                 os.remove(evsieve_link)
-            except:
-                pass
-
-        self.is_active = False
-        self.emit('status-changed', False)
+            except Exception as e:
+                logger.debug(f"Failed to remove link {evsieve_link}: {e}")

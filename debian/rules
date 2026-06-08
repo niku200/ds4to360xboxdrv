@@ -17,4 +17,4 @@ override_dh_auto_install:
 	sed -i "s|ExecStart=.*|ExecStart=/usr/bin/ds4to360-backend|" debian/ds4to360xboxdrv/usr/lib/systemd/system/ds4-xboxdrv.service
 	install -Dm644 99-ds4-xboxdrv.rules debian/ds4to360xboxdrv/usr/lib/udev/rules.d/99-ds4-xboxdrv.rules
 	install -Dm644 ds4to360-gui.desktop debian/ds4to360xboxdrv/usr/share/applications/ds4to360-gui.desktop
-	install -Dm644 ds4to360.conf.example debian/ds4to360xboxdrv/etc/ds4to360.conf
+	install -Dm644 ds4to360.conf.example debian/ds4to360xboxdrv/etc/ds4to360/ds4to360.conf

@@ -9,7 +9,7 @@ license=('MIT')
 depends=('python' 'python-gobject' 'gtk4' 'libadwaita' 'systemd' 'xboxdrv' 'polkit' 'python-evdev' 'python-pyudev')
 makedepends=('rye' 'python-installer')
 optdepends=('evsieve: For better device grabbing and exclusive control')
-backup=('etc/ds4to360.conf')
+backup=('etc/ds4to360/ds4to360.conf')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
 
@@ -39,7 +39,7 @@ package() {
   install -Dm644 ds4to360-gui.desktop "${pkgdir}/usr/share/applications/ds4to360-gui.desktop"
 
   # Install default config
-  install -Dm644 ds4to360.conf.example "${pkgdir}/etc/ds4to360.conf"
+  install -Dm644 ds4to360.conf.example "${pkgdir}/etc/ds4to360/ds4to360.conf"
 
   # Install license
   install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"

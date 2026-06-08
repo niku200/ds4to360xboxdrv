@@ -11,7 +11,9 @@ from ds4to360.gui.controller_widget import ControllerWidget
 logger = logging.getLogger(__name__)
 
 STATUS_FILE = "/run/ds4to360/status.json"
-CONFIG_PATH = "/etc/ds4to360.conf"
+CONFIG_DIR = "/etc/ds4to360"
+CONFIG_PATH = "/etc/ds4to360/ds4to360.conf"
+LEGACY_CONFIG_PATH = "/etc/ds4to360.conf"
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, manager, *args, **kwargs):
@@ -147,10 +149,21 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.view_stack.add_titled_with_icon(box, "logs", "Logs", "view-list-bullet-symbolic")
 
+        self.connect("destroy", self._on_destroy)
+
+    def _on_destroy(self, *args):
+        self.log_monitor_active = False
+        if hasattr(self, 'log_proc'):
+            self.log_proc.terminate()
+        if not self.is_observer:
+            self.manager.stop_all()
+
     def load_config(self):
         config = configparser.ConfigParser()
         if os.path.exists(CONFIG_PATH):
             config.read(CONFIG_PATH)
+        elif os.path.exists(LEGACY_CONFIG_PATH):
+            config.read(LEGACY_CONFIG_PATH)
 
         self.rumble_entry.set_text(config.get('settings', 'rumble_gain', fallback='15%'))
         self.steam_switch.set_active(config.getboolean('settings', 'steam_conflict_check', fallback=True))
@@ -160,7 +173,10 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_save_clicked(self, button):
         config = configparser.ConfigParser()
-        if os.path.exists(CONFIG_PATH): config.read(CONFIG_PATH)
+        if os.path.exists(CONFIG_PATH):
+            config.read(CONFIG_PATH)
+        elif os.path.exists(LEGACY_CONFIG_PATH):
+            config.read(LEGACY_CONFIG_PATH)
 
         if 'settings' not in config: config['settings'] = {}
         if 'mapping' not in config: config['mapping'] = {}
@@ -175,7 +191,9 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             with open(tmp_path, "w") as f:
                 config.write(f)
-            subprocess.run(["pkexec", "mv", tmp_path, CONFIG_PATH], check=True)
+            # Combine multiple operations into one pkexec call
+            cmd = f"mkdir -p {CONFIG_DIR} && mv {tmp_path} {CONFIG_PATH} && chmod 644 {CONFIG_PATH}"
+            subprocess.run(["pkexec", "sh", "-c", cmd], check=True)
             self.show_toast("Settings saved. Restart service to apply.")
         except Exception as e:
             logger.error(f"Error saving config: {e}")
@@ -185,7 +203,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.toast_overlay.add_toast(Adw.Toast(title=message))
 
     def _on_controllers_changed(self, manager):
-        self._refresh_controllers()
+        GLib.idle_add(self._refresh_controllers)
 
     def _refresh_controllers(self):
         while (child := self.controllers_group.get_first_child()):
@@ -233,11 +251,14 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def start_log_monitor(self):
+        self.log_monitor_active = True
         def monitor():
             try:
-                proc = subprocess.Popen(["journalctl", "-u", "ds4-xboxdrv.service", "-f", "-n", "100"],
+                self.log_proc = subprocess.Popen(["journalctl", "-u", "ds4-xboxdrv.service", "-f", "-n", "100"],
                                        stdout=subprocess.PIPE, text=True)
-                for line in iter(proc.stdout.readline, ""):
+                for line in iter(self.log_proc.stdout.readline, ""):
+                    if not self.log_monitor_active:
+                        break
                     GLib.idle_add(self.append_log, line)
             except: pass
         threading.Thread(target=monitor, daemon=True).start()
@@ -273,7 +294,7 @@ class Application(Adw.Application):
                 message_type=Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.OK,
                 text="Critical Error",
-                secondary_text=f"Failed to start the application: {e}\nCheck /tmp/ds4to360-gui.log for details."
+                secondary_text=f"Failed to start the application: {e}"
             )
             dialog.connect("response", lambda d, r: d.destroy())
             dialog.show()
