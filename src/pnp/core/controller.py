@@ -37,7 +37,7 @@ class Controller(GObject.Object):
         self.evsieve_proc.start()
 
         # Wait for the virtual device link to be created asynchronously
-        self._retry_count = 15
+        self._retry_count = 25
         GLib.timeout_add(200, self._check_evsieve_link, evsieve_link)
 
     def _check_evsieve_link(self, evsieve_link):
@@ -61,12 +61,14 @@ class Controller(GObject.Object):
             return
 
         # Get mapping from config
-        absmap = self.config.get('mapping', 'absmap', fallback='ABS_X=x1,ABS_Y=y1,ABS_Z=x2,ABS_RZ=y2,ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y')
-        keymap = self.config.get('mapping', 'keymap', fallback='BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide')
+        axismap = self.config.get('mapping', 'axismap', fallback='-y1=y1,-y2=y2')
+        absmap = self.config.get('mapping', 'absmap', fallback='ABS_X=x1,ABS_Y=y1,ABS_RX=x2,ABS_RY=y2,ABS_Z=lt,ABS_RZ=rt,ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y')
+        keymap = self.config.get('mapping', 'keymap', fallback='BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_TL2=lt,BTN_TR2=rt,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide')
 
         xboxdrv_cmd = [
             "xboxdrv", "--evdev", evsieve_link,
             "--mimic-xpad", "--silent",
+            "--axismap", axismap,
             "--evdev-absmap", absmap,
             "--evdev-keymap", keymap
         ]
