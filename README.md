@@ -58,18 +58,18 @@ yay -S pnp
 ```
 
 ### From .deb Package (Debian/Ubuntu)
-1. Download the latest `.deb` package from the [Releases](https://github.com/Pakrohk/pnp/releases) page.
+1. Download the latest `.deb` package from the [Releases](https://github.com/Pakrohk/pnp/releases) page, or find it in `dist-packages/` if you built it yourself.
 2. Install it using `dpkg`:
    ```bash
-   sudo dpkg -i pnp_5.2.0_amd64.deb
+   sudo dpkg -i dist-packages/pnp_5.2.0_amd64.deb
    sudo apt install -f  # Fix any missing dependencies
    ```
 
 ### From .rpm Package (Fedora/openSUSE)
-1. Download the latest `.rpm` package from the [Releases](https://github.com/Pakrohk/pnp/releases) page.
+1. Download the latest `.rpm` package from the [Releases](https://github.com/Pakrohk/pnp/releases) page, or find it in `dist-packages/` if you built it yourself.
 2. Install it using `dnf`:
    ```bash
-   sudo dnf install pnp-5.2.0-1.x86_64.rpm
+   sudo dnf install dist-packages/pnp-5.2.0-1.x86_64.rpm
    ```
 
 ### From Source
@@ -89,7 +89,7 @@ yay -S pnp
    ```
 
 ## Building Packages Yourself
-PNP includes a script to build native packages for multiple distributions using native tools or Docker:
+PNP includes a script to build native packages for multiple distributions using native tools or Docker. The script automatically prepares a local source tarball so that packages can be built even before the code is pushed to GitHub:
 ```bash
 ./build-all-packages.sh --all
 # Or with docker
