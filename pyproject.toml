@@ -35,13 +35,16 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/src",
-    "/99-pnp.rules",
-    "/pnp.service",
-    "/pnp.desktop",
-    "/pnp.conf.example",
-    "/LICENSE",
-    "/README.md",
+    "src/pnp",
+    "99-pnp.rules",
+    "pnp.service",
+    "pnp.desktop",
+    "pnp.conf.example",
+    "LICENSE",
+    "README.md",
+]
+exclude = [
+    "src/99-pnp.rules",
 ]
 
 [tool.hatch.build.targets.wheel]
