@@ -1,10 +1,11 @@
 [project]
 name = "ds4to360xboxdrv"
-version = "5.1.0"
+version = "5.1.1"
 description = "DualShock 4/3 and DualSense to Xbox 360 Controller Mapper for Linux"
 authors = [
-    { name = "Jules", email = "jules@example.com" }
+    { name = "Pakrohk", email = "pakrohk@gmail.com" }
 ]
+license = { text = "MIT" }
 dependencies = [
     "PyGObject>=3.42.0",
     "evdev>=1.6.0",
@@ -12,6 +13,16 @@ dependencies = [
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Utilities",
+]
+
+[project.urls]
+Homepage = "https://github.com/Pakrohk/ds4to360xboxdrv"
+"Bug Tracker" = "https://github.com/Pakrohk/ds4to360xboxdrv/issues"
 
 [project.scripts]
 ds4to360-gui = "ds4to360.gui:main"
@@ -29,3 +40,15 @@ managed = true
 dev-dependencies = [
     "installer>=1.0.1",
 ]
+
+[[tool.rye.sources]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[[tool.rye.sources]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple"
+
+[[tool.rye.sources]]
+name = "pypi"
+url = "https://pypi.org/simple"

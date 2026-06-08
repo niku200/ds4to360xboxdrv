@@ -1,7 +1,7 @@
 Source: ds4to360xboxdrv
 Section: python
 Priority: optional
-Maintainer: Jules <jules@example.com>
+Maintainer: Pakrohk <pakrohk@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3-all, rye, python3-installer
 Standards-Version: 4.6.2
 Homepage: https://github.com/Pakrohk/ds4to360xboxdrv

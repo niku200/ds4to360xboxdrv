@@ -1,14 +1,15 @@
-# DualShock 4 to Xbox 360 Controller Mapper for Linux (v5.1.0)
+# DualShock 4 to Xbox 360 Controller Mapper for Linux (v5.1.1)
 
 Modernized and enhanced version of `ds4to360xboxdrv`. This utility emulates an Xbox 360 controller using Sony DualShock 3, 4, and DualSense controllers, providing seamless integration with Linux games.
 
-## ✨ New in v5.1.0
+## ✨ New in v5.1.1
 
-*   **Rye Support:** Now managed with [Rye](https://rye-up.com/) for better Python dependency management.
-*   **Multi-Controller Support:** Simultaneously map multiple Sony controllers to multiple virtual Xbox 360 controllers.
-*   **Enhanced GTK4/Libadwaita GUI:** Modern, responsive UI with real-time status and logs.
-*   **Python-evdev Backend:** More reliable and faster controller detection.
-*   **Steam Conflict Detection:** Automatically pauses mapping when Steam is running to prevent double-input.
+*   **Build Reliability:** Added support for PyPI mirrors (Tsinghua, Aliyun) in `pyproject.toml` to fix network timeouts.
+*   **GUI Hardening:** Fixed GTK4 `set_margin_all` crashes and modernized theme management with `AdwStyleManager`.
+*   **Dependency Checks:** Added runtime verification for `xboxdrv` and `evsieve`.
+*   **Improved Logging:** GUI and Backend now log to `/tmp/ds4to360-gui.log` and `/tmp/ds4to360-backend.log`.
+*   **Rye Support:** Managed with [Rye](https://rye-up.com/) for better Python dependency management.
+*   **Multi-Controller Support:** Simultaneously map multiple Sony controllers.
 
 ## 🚀 Installation
 
@@ -46,9 +47,16 @@ If you prefer to build the project manually or contribute to development:
     ```bash
     git clone https://github.com/Pakrohk/ds4to360xboxdrv
     cd ds4to360xboxdrv
+    # If you experience network timeouts, Rye will automatically try mirrors.
+    # You can also set RYE_INDEX_TIMEOUT=30
     rye build --wheel
     ```
-3.  **Install the Wheel:**
+3.  **Offline / Mirror Building:**
+    If you are in a restricted network, you can use the helper script:
+    ```bash
+    ./scripts/build-offline.sh
+    ```
+4.  **Install the Wheel:**
     ```bash
     pip install dist/*.whl
     ```
@@ -58,12 +66,28 @@ If you prefer to build the project manually or contribute to development:
     rye run ds4to360-gui
     ```
 
+### System Dependencies
+
+This application requires the following system binaries:
+- `xboxdrv`
+- `evsieve`
+
+You can check if they are installed by running:
+```bash
+./scripts/check-deps.py
+```
+
+#### Installation on Distributions:
+- **Arch Linux:** `sudo pacman -S xboxdrv` (evsieve via AUR).
+- **Ubuntu/Debian:** `sudo apt install xboxdrv` (evsieve must be built from source).
+- **Fedora:** `sudo dnf install xboxdrv` (from RPM Fusion).
+
 ### Legacy Manual Installation
 On distributions where native packages are not yet ready, use the provided installation script:
 ```bash
 sudo ./install.sh
 ```
-*Note: The script will install system dependencies (`xboxdrv`, `evsieve`, `python-gobject`, `gtk4`, `libadwaita`).*
+*Note: The script will install system dependencies.*
 
 ## 🎮 Usage
 1.  Launch **"DS4 to Xbox 360"** from your application menu or run `ds4to360-gui`.
