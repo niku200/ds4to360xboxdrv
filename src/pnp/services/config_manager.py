@@ -27,14 +27,14 @@ class ConfigManager:
         if 'mapping' not in self.config:
             self.config['mapping'] = {}
         self.config['mapping']['axismap'] = '-y1=y1,-y2=y2'
-        self.config['mapping']['absmap'] = 'ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y,ABS_X=X1,ABS_Y=Y1,ABS_RX=X2,ABS_RY=Y2,ABS_Z=LT,ABS_RZ=RT'
-        self.config['mapping']['keymap'] = 'BTN_SOUTH=A,BTN_EAST=B,BTN_NORTH=Y,BTN_WEST=X,BTN_START=start,BTN_MODE=guide,BTN_SELECT=back,BTN_TL=LB,BTN_TR=RB,BTN_TL2=LT,BTN_TR2=RT,BTN_THUMBL=TL,BTN_THUMBR=TR'
+        self.config['mapping']['absmap'] = 'ABS_X=x1,ABS_Y=y1,ABS_RX=x2,ABS_RY=y2,ABS_Z=lt,ABS_RZ=rt,ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y'
+        self.config['mapping']['keymap'] = 'BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_TL2=lt,BTN_TR2=rt,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide'
 
     def get_controller_config(self, serial):
         # Look for per-controller config
         path = os.path.join(USER_CONFIG_DIR, f"{serial}.conf")
         if os.path.exists(path):
-            c_config = configparser.ConfigParser()
+            c_config = configparser.ConfigParser(interpolation=None)
             c_config.read(path)
             return c_config
         return self.config
