@@ -2,14 +2,13 @@ import logging
 import sys
 import shutil
 from gi.repository import GLib
-from ds4to360.core.manager import ControllerManager
-from ds4to360.services.steam_detector import SteamDetector
+from pnp.core.manager import ControllerManager
+from pnp.services.steam_detector import SteamDetector
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("/tmp/ds4to360-backend.log"),
         logging.StreamHandler()
     ]
 )
@@ -40,7 +39,7 @@ class BackendService:
             logger.error(f"Missing system dependencies: {', '.join(missing)}. Exiting.")
             return
 
-        logger.info("Starting ds4to360 backend service...")
+        logger.info("Starting pnp backend service...")
         self.manager.start()
         self.steam_detector.start()
         try:

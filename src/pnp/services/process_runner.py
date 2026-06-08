@@ -19,12 +19,14 @@ class ProcessRunner:
 
         try:
             logger.info(f"Starting {self.name}: {' '.join(self.command)}")
+            # Use DEVNULL for pipes to avoid buffer exhaustion hangs.
+            # Output is normally not needed as we monitor the service itself.
             self.process = subprocess.Popen(
                 self.command,
                 env=self.env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                preexec_fn=os.setsid
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
             )
         except Exception as e:
             logger.error(f"Failed to start {self.name}: {e}")
@@ -33,13 +35,20 @@ class ProcessRunner:
         if not self.process:
             return
 
-        logger.info(f"Stopping {self.name} (PID: {self.process.pid})")
+        pid = self.process.pid
+        logger.info(f"Stopping {self.name} (PID: {pid})")
         try:
-            os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
+            os.killpg(pid, signal.SIGTERM)
             self.process.wait(timeout=5)
+        except ProcessLookupError:
+            pass
         except subprocess.TimeoutExpired:
             logger.warning(f"{self.name} did not stop gracefully, killing...")
-            os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
+            try:
+                os.killpg(pid, signal.SIGKILL)
+                self.process.wait(timeout=2)
+            except:
+                pass
         except Exception as e:
             logger.error(f"Error stopping {self.name}: {e}")
         finally:

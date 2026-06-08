@@ -25,8 +25,12 @@ class ControllerWidget(Adw.ActionRow):
             self.controller.stop()
 
     def _on_status_changed(self, controller, active):
+        GLib.idle_add(self._on_status_changed_idle, active)
+
+    def _on_status_changed_idle(self, active):
         self.switch.set_active(active)
         self._update_ui(active)
+        return False
 
     def _update_ui(self, active):
         if active:

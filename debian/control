@@ -1,15 +1,15 @@
-Source: ds4to360xboxdrv
+Source: pnp
 Section: python
 Priority: optional
-Maintainer: Pakrohk <pakrohk@gmail.com>
+Maintainer: pakrohk <pakrohk@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3-all, rye, python3-installer
 Standards-Version: 4.6.2
-Homepage: https://github.com/Pakrohk/ds4to360xboxdrv
+Homepage: https://github.com/Pakrohk/pnp
 
-Package: ds4to360xboxdrv
+Package: pnp
 Architecture: any
-Depends: ${python3:Depends}, ${misc:Depends}, xboxdrv, python3-gi, libgtk-4-1, libadwaita-1-0, systemd, python3-evdev, python3-pyudev
-Description: DualShock 4/3 and DualSense to Xbox 360 Controller Mapper
- ds4to360xboxdrv is a tool to emulate an Xbox 360 controller on Linux using
- DualShock 4, 3, or DualSense controllers. It features a modern GTK4/Libadwaita
- GUI and a robust backend using xboxdrv and evdev.
+Depends: ${python3:Depends}, ${misc:Depends}, xboxdrv, evsieve, python3-gi, libgtk-4-1, libadwaita-1-0, systemd, python3-evdev, python3-pyudev
+Description: PNP (PS NOT PS) – PlayStation to Xbox controller emulator for Linux
+ PNP is a tool to emulate an Xbox 360 controller on Linux using
+ PlayStation DualShock or DualSense controllers. It features a modern
+ GTK4/Libadwaita GUI and a robust backend using xboxdrv and evsieve.

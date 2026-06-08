@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-export PYBUILD_NAME=ds4to360xboxdrv
+export PYBUILD_NAME=pnp
 
 %:
 	dh $@ --with python3
@@ -9,12 +9,12 @@ override_dh_auto_build:
 	rye build --wheel --clean
 
 override_dh_auto_install:
-	python3 -m installer --destdir=debian/ds4to360xboxdrv --prefix=/usr dist/*.whl
+	python3 -m installer --destdir=debian/pnp --prefix=/usr dist/*.whl
 	# Fix shebangs
-	sed -i '1s|#!.*|#!/usr/bin/python3|' debian/ds4to360xboxdrv/usr/bin/ds4to360-*
+	sed -i '1s|#!.*|#!/usr/bin/python3|' debian/pnp/usr/bin/pnp-*
 	# Install system files
-	install -Dm644 ds4-xboxdrv.service debian/ds4to360xboxdrv/usr/lib/systemd/system/ds4-xboxdrv.service
-	sed -i "s|ExecStart=.*|ExecStart=/usr/bin/ds4to360-backend|" debian/ds4to360xboxdrv/usr/lib/systemd/system/ds4-xboxdrv.service
-	install -Dm644 99-ds4-xboxdrv.rules debian/ds4to360xboxdrv/usr/lib/udev/rules.d/99-ds4-xboxdrv.rules
-	install -Dm644 ds4to360-gui.desktop debian/ds4to360xboxdrv/usr/share/applications/ds4to360-gui.desktop
-	install -Dm644 ds4to360.conf.example debian/ds4to360xboxdrv/etc/ds4to360.conf
+	install -Dm644 pnp.service debian/pnp/usr/lib/systemd/system/pnp.service
+	sed -i "s|ExecStart=.*|ExecStart=/usr/bin/pnp-backend|" debian/pnp/usr/lib/systemd/system/pnp.service
+	install -Dm644 99-pnp.rules debian/pnp/usr/lib/udev/rules.d/99-pnp.rules
+	install -Dm644 pnp.desktop debian/pnp/usr/share/applications/pnp.desktop
+	install -Dm644 pnp.conf.example debian/pnp/etc/pnp/pnp.conf
