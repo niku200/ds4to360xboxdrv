@@ -1,8 +1,6 @@
 import sys
 import argparse
 import logging
-from pnp.gui import main as gui_main
-from pnp.backend import main as backend_main
 
 def main():
     parser = argparse.ArgumentParser(description="PNP (PS NOT PS) – PlayStation to Xbox controller emulator")
@@ -13,15 +11,21 @@ def main():
     args, unknown = parser.parse_known_args()
 
     log_level = logging.DEBUG if args.debug else logging.INFO
-    logging.getLogger().setLevel(log_level)
 
-    if args.headless:
-        # Headless mode: run the backend service
-        # We need to strip our own args before passing to backend_main if it expected sys.argv
+    # Set up logging globally before importing other pnp modules
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        force=True
+    )
+
+    # Deferred imports to ensure logging is configured first
+    if args.headless or "pnp-backend" in sys.argv[0]:
+        from pnp.backend import main as backend_main
         sys.argv = [sys.argv[0]] + unknown
         backend_main()
     else:
-        # GUI mode (default)
+        from pnp.gui import main as gui_main
         sys.argv = [sys.argv[0]] + unknown
         gui_main()
 
