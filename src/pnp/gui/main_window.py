@@ -5,167 +5,16 @@ import json
 import os
 import configparser
 import logging
+import tempfile
+from typing import Optional, List
 from gi.repository import Gtk, Adw, GLib, Gio
-
-# StatusNotifierItem (SNI) DBus implementation for GTK4 compatibility
-# This avoids importing GTK3-based AyatanaAppIndicator3 which causes symbol conflicts.
-SNI_INTERFACE = """
-<node>
-  <interface name="org.kde.StatusNotifierItem">
-    <property name="Category" type="s" access="read"/>
-    <property name="Id" type="s" access="read"/>
-    <property name="Title" type="s" access="read"/>
-    <property name="Status" type="s" access="read"/>
-    <property name="IconName" type="s" access="read"/>
-    <property name="SecondaryIconName" type="s" access="read"/>
-    <property name="OverlayIconName" type="s" access="read"/>
-    <property name="AttentionIconName" type="s" access="read"/>
-    <property name="AttentionMovieName" type="s" access="read"/>
-    <property name="ToolTip" type="(sa(iias)ss)" access="read"/>
-    <property name="ItemIsMenu" type="b" access="read"/>
-    <property name="Menu" type="o" access="read"/>
-    <method name="ContextMenu">
-      <arg name="x" type="i" direction="in"/>
-      <arg name="y" type="i" direction="in"/>
-    </method>
-    <method name="Activate">
-      <arg name="x" type="i" direction="in"/>
-      <arg name="y" type="i" direction="in"/>
-    </method>
-    <method name="SecondaryActivate">
-      <arg name="x" type="i" direction="in"/>
-      <arg name="y" type="i" direction="in"/>
-    </method>
-    <method name="Scroll">
-      <arg name="delta" type="i" direction="in"/>
-      <arg name="orientation" type="s" direction="in"/>
-    </method>
-    <signal name="NewTitle"/>
-    <signal name="NewIcon"/>
-    <signal name="NewAttentionIcon"/>
-    <signal name="NewOverlayIcon"/>
-    <signal name="NewMenu"/>
-    <signal name="NewStatus">
-      <arg name="status" type="s"/>
-    </signal>
-    <signal name="NewToolTip"/>
-  </interface>
-  <interface name="com.canonical.dbusmenu">
-    <method name="GetLayout">
-      <arg name="parentId" type="i" direction="in"/>
-      <arg name="recursionDepth" type="i" direction="in"/>
-      <arg name="propertyNames" type="as" direction="in"/>
-      <arg name="layout" type="(ia{sv}av)" direction="out"/>
-    </method>
-    <method name="GetGroupProperties">
-      <arg name="ids" type="ai" direction="in"/>
-      <arg name="propertyNames" type="as" direction="in"/>
-      <arg name="properties" type="a(ia{sv})" direction="out"/>
-    </method>
-    <method name="GetProperty">
-      <arg name="id" type="i" direction="in"/>
-      <arg name="name" type="s" direction="in"/>
-      <arg name="value" type="v" direction="out"/>
-    </method>
-    <method name="Event">
-      <arg name="id" type="i" direction="in"/>
-      <arg name="eventId" type="s" direction="in"/>
-      <arg name="data" type="v" direction="in"/>
-      <arg name="timestamp" type="u" direction="in"/>
-    </method>
-    <signal name="LayoutUpdated">
-      <arg name="revision" type="u"/>
-      <arg name="parentId" type="i"/>
-    </signal>
-  </interface>
-</node>
-"""
-
-class StatusNotifierItem:
-    def __init__(self, app, id, title, icon_name):
-        self.app = app
-        self.id = id
-        self.title = title
-        self.icon_name = icon_name
-        self.status = "Active"
-        self.category = "ApplicationStatus"
-
-        self.node_info = Gio.DBusNodeInfo.new_for_xml(SNI_INTERFACE)
-        self.interface_info = self.node_info.interfaces[0]
-
-        self.bus_id = Gio.bus_own_name(
-            Gio.BusType.SESSION,
-            f"org.kde.StatusNotifierItem-{os.getpid()}-1",
-            Gio.BusNameOwnerFlags.NONE,
-            self.on_bus_acquired,
-            None, None
-        )
-
-    def on_bus_acquired(self, connection, name):
-        connection.register_object(
-            "/StatusNotifierItem",
-            self.interface_info,
-            self.handle_method_call,
-            self.handle_get_property,
-            None
-        )
-        # Register DBusMenu
-        connection.register_object(
-            "/MenuBar",
-            self.node_info.interfaces[1],
-            self.handle_menu_method_call,
-            None, None
-        )
-        self.register_with_watcher(connection)
-
-    def handle_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
-        if method_name == "Activate":
-            GLib.idle_add(self.app.on_show_activate, None)
-        invocation.return_value(None)
-
-    def handle_menu_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
-        if method_name == "GetLayout":
-            # Simple menu: 0: root, 1: Show, 2: Quit
-            layout = (
-                0,
-                {"children-display": GLib.Variant("s", "submenu")},
-                [
-                    GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP")}, [])),
-                    GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", "Quit")}, []))
-                ]
-            )
-            invocation.return_value(GLib.Variant("(ia{sv}av)", layout))
-        elif method_name == "Event":
-            id, event_id, data, timestamp = parameters
-            if id == 1: GLib.idle_add(self.app.on_show_activate, None)
-            elif id == 2: GLib.idle_add(self.app.on_quit_activate, None)
-            invocation.return_value(None)
-        else:
-            invocation.return_value(None)
-
-    def handle_get_property(self, connection, sender, object_path, interface_name, property_name):
-        props = {
-            "Category": GLib.Variant("s", self.category),
-            "Id": GLib.Variant("s", self.id),
-            "Title": GLib.Variant("s", self.title),
-            "Status": GLib.Variant("s", self.status),
-            "IconName": GLib.Variant("s", self.icon_name),
-            "ItemIsMenu": GLib.Variant("b", True),
-            "Menu": GLib.Variant("o", "/MenuBar"),
-        }
-        return props.get(property_name)
-
-    def register_with_watcher(self, connection):
-        connection.call(
-            "org.kde.StatusNotifierWatcher",
-            "/StatusNotifierWatcher",
-            "org.kde.StatusNotifierWatcher",
-            "RegisterStatusNotifierItem",
-            GLib.Variant("(s)", ["/StatusNotifierItem"]),
-            None, Gio.DBusCallFlags.NONE, -1, None, None
-        )
+try:
+    import evdev
+except ImportError:
+    evdev = None
 
 from pnp.gui.controller_widget import ControllerWidget
+from pnp.gui.tray import StatusNotifierItem
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +148,7 @@ class MainWindow(Adw.ApplicationWindow):
         )
         box.append(status_page)
 
-        clamp = Adw.Clamp(maximum_size=600)
+        clamp = Adw.Clamp(maximum_size=800)
         inner_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         clamp.set_child(inner_box)
         box.append(clamp)
@@ -319,39 +168,117 @@ class MainWindow(Adw.ApplicationWindow):
         scroll.set_child(box)
         self.view_stack.add_titled_with_icon(scroll, "tester", "Tester", "preferences-desktop-peripherals-symbolic")
 
+        self.active_testers = {} # path -> {row, bars: {code -> progress}}
+
         if not self.is_observer:
-            GLib.timeout_add(100, self._update_tester)
+            GLib.timeout_add(100, self._update_tester_list)
 
-    def _update_tester(self):
-        # In a real environment, we would use evdev to read from the virtual xbox 360 controller
-        # However, for this UI, we will display real-time status of the managed controllers
-
-        while (child := self.tester_list.get_first_child()):
-            self.tester_list.remove(child)
-
-        active_count = 0
+    def _update_tester_list(self):
+        # Synchronize tester rows with active controllers
+        active_paths = set()
         for controller in self.manager.controllers.values():
             if controller.is_active:
-                active_count += 1
-                row = Adw.ActionRow(title=controller.name, subtitle=f"Virtual device linked at /dev/input/evsieve_{os.path.basename(controller.device_path)}")
-                row.add_prefix(Gtk.Image.new_from_icon_name("emblem-ok-symbolic"))
+                evsieve_link = f"/dev/input/evsieve_{os.path.basename(controller.device_path)}"
+                if os.path.exists(evsieve_link):
+                    active_paths.add(evsieve_link)
+                    if evsieve_link not in self.active_testers:
+                        self._add_tester_row(evsieve_link, controller.name)
 
-                # Add a "visualizer" bar
-                box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True, valign=Gtk.Align.CENTER)
-                progress = Gtk.ProgressBar()
-                # Pulse it to show it's "alive" since we aren't reading actual real-time axis yet
-                progress.pulse()
-                box.append(progress)
-                row.add_suffix(box)
+        # Remove stale testers
+        for path in list(self.active_testers.keys()):
+            if path not in active_paths:
+                self.tester_list.remove(self.active_testers[path]['row'])
+                del self.active_testers[path]
 
-                self.tester_list.append(row)
-
-        if active_count > 0:
-            self.tester_label.set_text(f"Monitoring {active_count} active virtual controller(s). Real-time input visualization is active.")
-        else:
+        if not active_paths:
             self.tester_label.set_text("No virtual controllers active. Enable a controller in the Status tab to test here.")
+        else:
+            self.tester_label.set_text(f"Monitoring {len(active_paths)} active virtual controller(s).")
 
         return True
+
+    def _add_tester_row(self, path, name):
+        row = Adw.ActionRow(title=name, subtitle=f"Virtual device: {path}")
+        row.add_prefix(Gtk.Image.new_from_icon_name("emblem-ok-symbolic"))
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=6, margin_bottom=6)
+
+        # Grid for axes
+        grid = Gtk.Grid(column_spacing=12, row_spacing=6)
+        main_box.append(grid)
+
+        bars = {}
+        axes = [("LX", 0), ("LY", 1), ("RX", 2), ("RY", 3), ("LT", 4), ("RT", 5)]
+        for i, (label, code) in enumerate(axes):
+            lbl = Gtk.Label(label=label)
+            lbl.set_halign(Gtk.Align.START)
+            progress = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
+            progress.set_fraction(0.5 if i < 4 else 0.0)
+            grid.attach(lbl, 0, i, 1, 1)
+            grid.attach(progress, 1, i, 1, 1)
+            bars[code] = progress
+
+        # Buttons flowbox
+        button_flowbox = Gtk.FlowBox(valign=Gtk.Align.CENTER, max_children_per_line=11, selection_mode=Gtk.SelectionMode.NONE)
+        main_box.append(button_flowbox)
+
+        buttons = {}
+        # Xbox 360 buttons
+        btns = [("A", 304), ("B", 305), ("X", 307), ("Y", 308), ("LB", 310), ("RB", 311), ("Back", 314), ("Start", 315), ("Guide", 316), ("TL", 317), ("TR", 318)]
+        for label, code in btns:
+            lbl = Gtk.Label(label=label)
+            lbl.add_css_class("pill")
+            lbl.add_css_class("dim-label")
+            button_flowbox.append(lbl)
+            buttons[code] = lbl
+
+        row.set_activatable_widget(None)
+        row.add_suffix(main_box)
+        self.tester_list.append(row)
+
+        self.active_testers[path] = {'row': row, 'bars': bars, 'buttons': buttons}
+
+        # Start a thread to read evdev events for this device
+        if evdev:
+            threading.Thread(target=self._read_evdev_events, args=(path,), daemon=True).start()
+
+    def _read_evdev_events(self, path):
+        try:
+            device = evdev.InputDevice(path)
+            for event in device.read_loop():
+                if path not in self.active_testers:
+                    break
+                if event.type == evdev.ecodes.EV_ABS:
+                    GLib.idle_add(self._update_tester_bar, path, event.code, event.value, device.absinfo(event.code))
+                elif event.type == evdev.ecodes.EV_KEY:
+                    GLib.idle_add(self._update_tester_button, path, event.code, event.value)
+        except Exception as e:
+            logger.error(f"Error reading evdev events from {path}: {e}")
+
+    def _update_tester_button(self, path, code, value):
+        if path in self.active_testers:
+            buttons = self.active_testers[path]['buttons']
+            if code in buttons:
+                lbl = buttons[code]
+                if value:
+                    lbl.remove_css_class("dim-label")
+                    lbl.add_css_class("success")
+                else:
+                    lbl.add_css_class("dim-label")
+                    lbl.remove_css_class("success")
+        return False
+
+    def _update_tester_bar(self, path, code, value, absinfo):
+        if path in self.active_testers:
+            bars = self.active_testers[path]['bars']
+            # Map evdev codes to our tester bars (xbox 360 codes)
+            # ABS_X=0, ABS_Y=1, ABS_RX=3, ABS_RY=4, ABS_Z=2 (LT), ABS_RZ=5 (RT)
+            mapping = {0: 0, 1: 1, 3: 2, 4: 3, 2: 4, 5: 5}
+            if code in mapping:
+                bar_idx = mapping[code]
+                fraction = (value - absinfo.min) / (absinfo.max - absinfo.min)
+                bars[bar_idx].set_fraction(fraction)
+        return False
 
     def setup_logs_page(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -406,10 +333,11 @@ class MainWindow(Adw.ApplicationWindow):
         config['mapping']['absmap'] = self.absmap_entry.get_text()
         config['mapping']['keymap'] = self.keymap_entry.get_text()
 
-        tmp_path = os.path.join(GLib.get_tmp_dir(), f"pnp-{os.getuid()}.conf")
         try:
-            with open(tmp_path, "w") as f:
-                config.write(f)
+            with tempfile.NamedTemporaryFile(mode="w", prefix="pnp-", suffix=".conf", delete=False) as tmp:
+                config.write(tmp)
+                tmp_path = tmp.name
+
             # Combine multiple operations into one pkexec call
             # Use 'install' to set permissions and copy in one go
             cmd = f"mkdir -p {CONFIG_DIR} && install -m 644 {tmp_path} {CONFIG_PATH} && rm {tmp_path}"

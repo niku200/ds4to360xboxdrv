@@ -1,0 +1,161 @@
+import os
+import logging
+from gi.repository import Gtk, GLib, Gio
+
+logger = logging.getLogger(__name__)
+
+SNI_INTERFACE = """
+<node>
+  <interface name="org.kde.StatusNotifierItem">
+    <property name="Category" type="s" access="read"/>
+    <property name="Id" type="s" access="read"/>
+    <property name="Title" type="s" access="read"/>
+    <property name="Status" type="s" access="read"/>
+    <property name="IconName" type="s" access="read"/>
+    <property name="SecondaryIconName" type="s" access="read"/>
+    <property name="OverlayIconName" type="s" access="read"/>
+    <property name="AttentionIconName" type="s" access="read"/>
+    <property name="AttentionMovieName" type="s" access="read"/>
+    <property name="ToolTip" type="(sa(iias)ss)" access="read"/>
+    <property name="ItemIsMenu" type="b" access="read"/>
+    <property name="Menu" type="o" access="read"/>
+    <method name="ContextMenu">
+      <arg name="x" type="i" direction="in"/>
+      <arg name="y" type="i" direction="in"/>
+    </method>
+    <method name="Activate">
+      <arg name="x" type="i" direction="in"/>
+      <arg name="y" type="i" direction="in"/>
+    </method>
+    <method name="SecondaryActivate">
+      <arg name="x" type="i" direction="in"/>
+      <arg name="y" type="i" direction="in"/>
+    </method>
+    <method name="Scroll">
+      <arg name="delta" type="i" direction="in"/>
+      <arg name="orientation" type="s" direction="in"/>
+    </method>
+    <signal name="NewTitle"/>
+    <signal name="NewIcon"/>
+    <signal name="NewAttentionIcon"/>
+    <signal name="NewOverlayIcon"/>
+    <signal name="NewMenu"/>
+    <signal name="NewStatus">
+      <arg name="status" type="s"/>
+    </signal>
+    <signal name="NewToolTip"/>
+  </interface>
+  <interface name="com.canonical.dbusmenu">
+    <method name="GetLayout">
+      <arg name="parentId" type="i" direction="in"/>
+      <arg name="recursionDepth" type="i" direction="in"/>
+      <arg name="propertyNames" type="as" direction="in"/>
+      <arg name="layout" type="(ia{sv}av)" direction="out"/>
+    </method>
+    <method name="GetGroupProperties">
+      <arg name="ids" type="ai" direction="in"/>
+      <arg name="propertyNames" type="as" direction="in"/>
+      <arg name="properties" type="a(ia{sv})" direction="out"/>
+    </method>
+    <method name="GetProperty">
+      <arg name="id" type="i" direction="in"/>
+      <arg name="name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="out"/>
+    </method>
+    <method name="Event">
+      <arg name="id" type="i" direction="in"/>
+      <arg name="eventId" type="s" direction="in"/>
+      <arg name="data" type="v" direction="in"/>
+      <arg name="timestamp" type="u" direction="in"/>
+    </method>
+    <signal name="LayoutUpdated">
+      <arg name="revision" type="u"/>
+      <arg name="parentId" type="i"/>
+    </signal>
+  </interface>
+</node>
+"""
+
+class StatusNotifierItem:
+    def __init__(self, app, id: str, title: str, icon_name: str):
+        self.app = app
+        self.id = id
+        self.title = title
+        self.icon_name = icon_name
+        self.status = "Active"
+        self.category = "ApplicationStatus"
+
+        self.node_info = Gio.DBusNodeInfo.new_for_xml(SNI_INTERFACE)
+        self.interface_info = self.node_info.interfaces[0]
+
+        self.bus_id = Gio.bus_own_name(
+            Gio.BusType.SESSION,
+            f"org.kde.StatusNotifierItem-{os.getpid()}-1",
+            Gio.BusNameOwnerFlags.NONE,
+            self.on_bus_acquired,
+            None, None
+        )
+
+    def on_bus_acquired(self, connection, name):
+        connection.register_object(
+            "/StatusNotifierItem",
+            self.interface_info,
+            self.handle_method_call,
+            self.handle_get_property,
+            None
+        )
+        # Register DBusMenu
+        connection.register_object(
+            "/MenuBar",
+            self.node_info.interfaces[1],
+            self.handle_menu_method_call,
+            None, None
+        )
+        self.register_with_watcher(connection)
+
+    def handle_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
+        if method_name == "Activate":
+            GLib.idle_add(self.app.on_show_activate, None)
+        invocation.return_value(None)
+
+    def handle_menu_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
+        if method_name == "GetLayout":
+            # Simple menu: 0: root, 1: Show, 2: Quit
+            layout = (
+                0,
+                {"children-display": GLib.Variant("s", "submenu")},
+                [
+                    GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP")}, [])),
+                    GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", "Quit")}, []))
+                ]
+            )
+            invocation.return_value(GLib.Variant("(ia{sv}av)", layout))
+        elif method_name == "Event":
+            id, event_id, data, timestamp = parameters
+            if id == 1: GLib.idle_add(self.app.on_show_activate, None)
+            elif id == 2: GLib.idle_add(self.app.on_quit_activate, None)
+            invocation.return_value(None)
+        else:
+            invocation.return_value(None)
+
+    def handle_get_property(self, connection, sender, object_path, interface_name, property_name):
+        props = {
+            "Category": GLib.Variant("s", self.category),
+            "Id": GLib.Variant("s", self.id),
+            "Title": GLib.Variant("s", self.title),
+            "Status": GLib.Variant("s", self.status),
+            "IconName": GLib.Variant("s", self.icon_name),
+            "ItemIsMenu": GLib.Variant("b", True),
+            "Menu": GLib.Variant("o", "/MenuBar"),
+        }
+        return props.get(property_name)
+
+    def register_with_watcher(self, connection):
+        connection.call(
+            "org.kde.StatusNotifierWatcher",
+            "/StatusNotifierWatcher",
+            "org.kde.StatusNotifierWatcher",
+            "RegisterStatusNotifierItem",
+            GLib.Variant("(s)", ["/StatusNotifierItem"]),
+            None, Gio.DBusCallFlags.NONE, -1, None, None
+        )
