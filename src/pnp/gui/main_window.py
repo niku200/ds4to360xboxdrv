@@ -244,14 +244,14 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _read_evdev_events(self, path):
         try:
-            device = evdev.InputDevice(path)
-            for event in device.read_loop():
-                if path not in self.active_testers:
-                    break
-                if event.type == evdev.ecodes.EV_ABS:
-                    GLib.idle_add(self._update_tester_bar, path, event.code, event.value, device.absinfo(event.code))
-                elif event.type == evdev.ecodes.EV_KEY:
-                    GLib.idle_add(self._update_tester_button, path, event.code, event.value)
+            with evdev.InputDevice(path) as device:
+                for event in device.read_loop():
+                    if path not in self.active_testers:
+                        break
+                    if event.type == evdev.ecodes.EV_ABS:
+                        GLib.idle_add(self._update_tester_bar, path, event.code, event.value, device.absinfo(event.code))
+                    elif event.type == evdev.ecodes.EV_KEY:
+                        GLib.idle_add(self._update_tester_button, path, event.code, event.value)
         except Exception as e:
             logger.error(f"Error reading evdev events from {path}: {e}")
 
@@ -305,7 +305,7 @@ class MainWindow(Adw.ApplicationWindow):
             self.manager.stop_all()
 
     def load_config(self):
-        config = configparser.ConfigParser(interpolation=None)
+        config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
         if os.path.exists(CONFIG_PATH):
             config.read(CONFIG_PATH)
         elif os.path.exists(LEGACY_CONFIG_PATH):
@@ -318,7 +318,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.keymap_entry.set_text(config.get('mapping', 'keymap', fallback='BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_TL2=lt,BTN_TR2=rt,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide'))
 
     def on_save_clicked(self, button):
-        config = configparser.ConfigParser(interpolation=None)
+        config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
         if os.path.exists(CONFIG_PATH):
             config.read(CONFIG_PATH)
         elif os.path.exists(LEGACY_CONFIG_PATH):
