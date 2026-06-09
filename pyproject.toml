@@ -27,8 +27,8 @@ Repository = "https://github.com/pakrohk/pnp"
 
 [project.scripts]
 pnp = "pnp.main:main"
-pnp-gui = "pnp.gui:main"
-pnp-backend = "pnp.backend:main"
+pnp-gui = "pnp.main:main"
+pnp-backend = "pnp.main:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -56,6 +56,10 @@ managed = true
 dev-dependencies = [
     "installer>=1.0.1",
 ]
+
+[tool.rye.scripts]
+pnp = "pnp-gui"
+pnp-debug = "pnp-gui --debug"
 
 [[tool.rye.sources]]
 name = "tsinghua"
