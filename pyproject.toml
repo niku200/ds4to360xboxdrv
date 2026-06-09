@@ -26,6 +26,7 @@ Repository = "https://github.com/pakrohk/pnp"
 "Bug Tracker" = "https://github.com/pakrohk/pnp/issues"
 
 [project.scripts]
+pnp = "pnp.main:main"
 pnp-gui = "pnp.gui:main"
 pnp-backend = "pnp.backend:main"
 
