@@ -236,14 +236,14 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Only iterate manager controllers if we have a manager (manager mode)
         if self.manager:
-            for controller in self.manager.controllers.values():
+            for controller in list(self.manager.controllers.values()):
                 if controller.is_active:
-                link_id = f"{controller.serial}_{os.path.basename(controller.device_path)}"
-                evsieve_link = f"/dev/input/evsieve_{link_id}"
-                if os.path.exists(evsieve_link):
-                    active_paths.add(evsieve_link)
-                    if evsieve_link not in self.active_testers:
-                        self._add_tester_row(evsieve_link, controller.name)
+                    link_id = f"{controller.serial}_{os.path.basename(controller.device_path)}"
+                    evsieve_link = f"/dev/input/evsieve_{link_id}"
+                    if os.path.exists(evsieve_link):
+                        active_paths.add(evsieve_link)
+                        if evsieve_link not in self.active_testers:
+                            self._add_tester_row(evsieve_link, controller.name)
 
         # Add virtual Xbox 360 controllers (output of xboxdrv)
         # These usually appear as /dev/input/js* or /dev/input/event*
@@ -684,6 +684,8 @@ class Application(Adw.Application):
 
     def on_toggle_steam_check(self, _):
         self.steam_check_enabled = not self.steam_check_enabled
+        if self.indicator:
+            self.indicator.update_menu()
         win = self.get_active_window()
         if win:
             win.steam_switch.set_active(self.steam_check_enabled)

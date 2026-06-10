@@ -164,6 +164,24 @@ class StatusNotifierItem:
         }
         return props.get(property_name)
 
+    def update_menu(self):
+        # Notify that layout has changed
+        bus = Gio.BusType.SESSION
+        Gio.bus_get(bus, None, self._on_bus_ready_for_signal)
+
+    def _on_bus_ready_for_signal(self, _, res):
+        try:
+            conn = Gio.bus_get_finish(res)
+            conn.emit_signal(
+                None,
+                "/MenuBar",
+                "com.canonical.dbusmenu",
+                "LayoutUpdated",
+                GLib.Variant("(ui)", (0, 0))
+            )
+        except:
+            pass
+
     def register_with_watcher(self, connection):
         def on_call_done(conn, res):
             try:
