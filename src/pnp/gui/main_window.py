@@ -7,7 +7,7 @@ import configparser
 import logging
 import tempfile
 from typing import Optional, List
-from gi.repository import Gtk, Adw, GLib, Gio
+from gi.repository import Gtk, Adw, GLib, Gio, Gdk
 try:
     import evdev
 except ImportError:
@@ -660,7 +660,7 @@ class MainWindow(Adw.ApplicationWindow):
                 }
             """)
             Gtk.StyleContext.add_provider_for_display(
-                Gio.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
             self._css_loaded = True
 

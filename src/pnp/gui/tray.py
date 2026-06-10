@@ -139,6 +139,9 @@ class StatusNotifierItem:
                     GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Exit Application")}, []))
                 ]
             )
+            # The interface signature is (ia{sv}av), but GetLayout returns (u(ia{sv}av))
+            # Wait, the XML says (ia{sv}av) is the output.
+            # Let's try wrapping it in another tuple if needed by the caller.
             invocation.return_value(GLib.Variant("((ia{sv}av))", (layout,)))
         elif method_name == "Event":
             id, event_id, data, timestamp = parameters
