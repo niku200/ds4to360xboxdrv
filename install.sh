@@ -41,27 +41,29 @@ identify_distro_and_install_deps
 
 echo "Setting up application directory: $SHARE_DIR"
 mkdir -p "$SHARE_DIR"
-cp -r src/pnp "$SHARE_DIR/"
+# Copy src directory and pyproject.toml to ensure package structure is preserved
+cp -r src "$SHARE_DIR/"
 cp pyproject.toml "$SHARE_DIR/"
 
 # Create a virtual environment to avoid PEP 668 issues on modern distros (Debian 12+, Fedora, etc)
 echo "Setting up Python virtual environment..."
 python3 -m venv --system-site-packages "$SHARE_DIR/venv"
 "$SHARE_DIR/venv/bin/pip" install --upgrade pip
+# Install from SHARE_DIR where pyproject.toml is located
 "$SHARE_DIR/venv/bin/pip" install -e "$SHARE_DIR"
 
 # Create robust wrapper scripts
 echo "Installing wrapper scripts..."
 cat <<EOF > /usr/bin/pnp-gui
 #!/bin/sh
-export PYTHONPATH="$SHARE_DIR:\$PYTHONPATH"
+export PYTHONPATH="$SHARE_DIR/src:\$PYTHONPATH"
 exec "$SHARE_DIR/venv/bin/python3" -m pnp.main "\$@"
 EOF
 chmod 755 /usr/bin/pnp-gui
 
 cat <<EOF > /usr/bin/pnp-backend
 #!/bin/sh
-export PYTHONPATH="$SHARE_DIR:\$PYTHONPATH"
+export PYTHONPATH="$SHARE_DIR/src:\$PYTHONPATH"
 exec "$SHARE_DIR/venv/bin/python3" -m pnp.main --headless "\$@"
 EOF
 chmod 755 /usr/bin/pnp-backend

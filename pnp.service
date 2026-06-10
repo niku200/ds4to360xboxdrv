@@ -7,7 +7,7 @@ Requires=bluetooth.service
 Type=simple
 WorkingDirectory=/usr/share/pnp
 ExecStart=/usr/share/pnp/venv/bin/python3 -m pnp.main --headless
-Environment=PYTHONPATH=/usr/share/pnp
+Environment=PYTHONPATH=/usr/share/pnp/src
 Environment=WAYLAND_DISPLAY=wayland-0
 Environment=XDG_RUNTIME_DIR=%t
 Restart=on-failure

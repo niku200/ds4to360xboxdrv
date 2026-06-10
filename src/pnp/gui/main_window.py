@@ -98,7 +98,9 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             # Update service switch state
             active = is_service_active()
-            self.service_switch.set_state(active)
+            self.service_switch.handler_block_by_func(self._on_service_switch_toggled)
+            self.service_switch.set_active(active)
+            self.service_switch.handler_unblock_by_func(self._on_service_switch_toggled)
 
             if active:
                 logger.info("Service is active. GUI running in observer mode.")
@@ -352,11 +354,14 @@ class MainWindow(Adw.ApplicationWindow):
         add_viz("B", 305, 2, 6)
         add_viz("A", 304, 3, 5)
 
-        # D-Pad
-        add_viz("DU", 16, 1, 1)
-        add_viz("DL", 18, 2, 0)
-        add_viz("DR", 19, 2, 2)
-        add_viz("DD", 17, 3, 1)
+        # D-Pad (Mapped to standard HAT codes in xboxdrv usually)
+        # But we need standard codes from evdev for the tester to pick them up
+        # Standard Hat0X/Y are 16/17 but they are ABS, not KEY.
+        # If they come through as keys (e.g. 706, 707, 704, 705), we handle them.
+        add_viz("DU", 706, 1, 1)
+        add_viz("DL", 704, 2, 0)
+        add_viz("DR", 705, 2, 2)
+        add_viz("DD", 707, 3, 1)
 
         # Function Buttons
         add_viz("Bk", 314, 2, 3)
@@ -445,7 +450,18 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _update_tester_bar(self, path, code, value, absinfo):
         if path in self.active_testers:
-            bars = self.active_testers[path]['bars']
+            tester = self.active_testers[path]
+            bars = tester['bars']
+            buttons = tester['buttons']
+
+            # Handle D-Pad (ABS_HAT0X=16, ABS_HAT0Y=17)
+            if code == 16: # HAT0X
+                GLib.idle_add(self._update_tester_button, path, 704, 1 if value < 0 else 0) # Left
+                GLib.idle_add(self._update_tester_button, path, 705, 1 if value > 0 else 0) # Right
+            elif code == 17: # HAT0Y
+                GLib.idle_add(self._update_tester_button, path, 706, 1 if value < 0 else 0) # Up
+                GLib.idle_add(self._update_tester_button, path, 707, 1 if value > 0 else 0) # Down
+
             # Map evdev codes to our tester bars (xbox 360 codes)
             # ABS_X=0, ABS_Y=1, ABS_RX=3, ABS_RY=4, ABS_Z=2 (LT), ABS_RZ=5 (RT)
             mapping = {0: 0, 1: 1, 3: 2, 4: 3, 2: 4, 5: 5}
@@ -488,6 +504,15 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_destroy(self, *args):
         logger.debug("MainWindow destroying...")
         self.log_monitor_active = False
+        # Stop background timers first
+        if hasattr(self, 'tester_timer_id') and self.tester_timer_id:
+            GLib.source_remove(self.tester_timer_id)
+            self.tester_timer_id = None
+
+        if hasattr(self, 'observer_timer_id') and self.observer_timer_id:
+            GLib.source_remove(self.observer_timer_id)
+            self.observer_timer_id = None
+
         app = self.get_application()
         if app and hasattr(app, 'indicator') and app.indicator:
             app.indicator.cleanup()
@@ -515,8 +540,10 @@ class MainWindow(Adw.ApplicationWindow):
             app.quit()
 
         # Hard exit if needed to ensure background threads like log monitor are killed
-        # but let GLib finish its cleanup if possible.
-        GLib.timeout_add(500, lambda: sys.exit(0))
+        # and all related processes are reaped.
+        # Use os._exit to skip cleanup handlers if we are already in destroy
+        # to ensure the process actually dies.
+        GLib.timeout_add(100, lambda: os._exit(0))
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -623,9 +650,11 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def _update_observer_status(self):
-        # Update service switch state
+        # Update service switch state without triggering the signal
         active = is_service_active()
-        self.service_switch.set_state(active)
+        self.service_switch.handler_block_by_func(self._on_service_switch_toggled)
+        self.service_switch.set_active(active)
+        self.service_switch.handler_unblock_by_func(self._on_service_switch_toggled)
 
         if not active:
             self.status_page.set_title("Service Offline")
@@ -808,6 +837,10 @@ class Application(Adw.Application):
         if win:
             win.steam_switch.set_active(self.steam_check_enabled)
             win.show_toast(f"Steam check {'enabled' if self.steam_check_enabled else 'disabled'}")
+
+        # Update manager if running
+        if win and win.manager:
+            win.manager.set_steam_paused(not self.steam_check_enabled)
 
     def do_startup(self):
         Adw.Application.do_startup(self)
