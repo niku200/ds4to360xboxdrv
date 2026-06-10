@@ -12,6 +12,9 @@ def main():
 
     log_level = logging.DEBUG if args.debug else logging.INFO
 
+    if args.debug:
+        os.environ["DEBUG"] = "1"
+
     # Set up logging globally before importing other pnp modules
     logging.basicConfig(
         level=log_level,

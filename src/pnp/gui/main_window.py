@@ -13,6 +13,7 @@ try:
 except ImportError:
     evdev = None
 
+from pnp.gui.__init__ import is_service_active, check_dependencies
 from pnp.gui.controller_widget import ControllerWidget
 from pnp.gui.tray import StatusNotifierItem
 
@@ -481,11 +482,9 @@ class MainWindow(Adw.ApplicationWindow):
 
 class Application(Adw.Application):
     def __init__(self):
-        # Use a unique application ID to avoid registration conflicts
-        app_id = "io.github.pakrohk.pnp"
-        if os.environ.get("DEBUG"):
-            app_id += ".debug"
-        super().__init__(application_id=app_id, flags=Gio.ApplicationFlags.FLAGS_NONE)
+        # Use NON_UNIQUE flag to completely avoid registration timeouts and DBus locks.
+        # This allows the GUI to always start immediately as a shell.
+        super().__init__(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.indicator = None
 
     def setup_indicator(self):
