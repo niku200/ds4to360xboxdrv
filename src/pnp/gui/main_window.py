@@ -24,10 +24,10 @@ CONFIG_PATH = "/etc/pnp/pnp.conf"
 LEGACY_CONFIG_PATH = "/etc/ds4to360.conf"
 
 class MainWindow(Adw.ApplicationWindow):
-    def __init__(self, manager, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.manager = manager
-        self.is_observer = manager is None
+        self.manager = None
+        self.is_observer = True
 
         self.set_title("PNP – PS NOT PS")
         self.set_default_size(900, 700)
@@ -69,14 +69,38 @@ class MainWindow(Adw.ApplicationWindow):
         # Connect destroy signal early
         self.connect("destroy", self._on_destroy)
 
-        if not self.is_observer:
-            self.manager_handler_id = self.manager.connect('controller-list-changed', self._on_controllers_changed)
-            self._refresh_controllers()
-        else:
-            self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
+        # Defer manager initialization to background to keep UI responsive
+        GLib.idle_add(self._init_backend)
 
         self.load_config()
         self.start_log_monitor()
+
+    def _init_backend(self):
+        try:
+            if is_service_active():
+                logger.info("Service is active. GUI running in observer mode.")
+                self.is_observer = True
+                self.manager = None
+            else:
+                logger.info("Service inactive. Starting local manager.")
+                from pnp.core.manager import ControllerManager
+                self.is_observer = False
+                self.manager = ControllerManager()
+                self.manager.start()
+                self.manager_handler_id = self.manager.connect('controller-list-changed', self._on_controllers_changed)
+                self._refresh_controllers()
+
+            if self.is_observer:
+                self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
+
+            # Check dependencies
+            missing = check_dependencies()
+            if missing:
+                self.show_toast(f"Missing dependencies: {', '.join(missing)}")
+        except Exception as e:
+            logger.error(f"Failed to initialize backend: {e}")
+            self.show_toast("Backend initialization failed. See logs.")
+        return False
 
     def setup_status_page(self):
         page_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -456,14 +480,12 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
 class Application(Adw.Application):
-    def __init__(self, manager):
+    def __init__(self):
         # Use a unique application ID to avoid registration conflicts
         app_id = "io.github.pakrohk.pnp"
         if os.environ.get("DEBUG"):
             app_id += ".debug"
         super().__init__(application_id=app_id, flags=Gio.ApplicationFlags.FLAGS_NONE)
-        self.manager = manager
-        self.missing_deps = []
         self.indicator = None
 
     def setup_indicator(self):
@@ -495,15 +517,9 @@ class Application(Adw.Application):
         try:
             win = self.get_active_window()
             if not win:
-                win = MainWindow(self.manager, application=self)
+                win = MainWindow(application=self)
 
             win.present()
-
-            if self.missing_deps:
-                msg = f"Missing system dependencies: {', '.join(self.missing_deps)}. Please install them for the application to function correctly."
-                toast = Adw.Toast(title=msg)
-                toast.set_timeout(10)
-                win.toast_overlay.add_toast(toast)
         except Exception as e:
             logger.critical(f"Failed to activate application: {e}", exc_info=True)
             # Show a fallback error dialog if possible
