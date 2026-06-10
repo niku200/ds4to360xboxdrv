@@ -93,6 +93,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.controllers_group = Adw.PreferencesGroup(title="Active Controllers")
         box.append(self.controllers_group)
 
+        self.controllers_list = Gtk.ListBox()
+        self.controllers_list.add_css_class("boxed-list")
+        self.controllers_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.controllers_group.add(self.controllers_list)
+
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(page_box)
         self.view_stack.add_titled_with_icon(scroll, "status", "Status", "network-transmit-receive-symbolic")
@@ -376,14 +381,19 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.idle_add(self._refresh_controllers)
 
     def _refresh_controllers(self):
-        while (child := self.controllers_group.get_first_child()):
-            self.controllers_group.remove(child)
+        while (child := self.controllers_list.get_first_child()):
+            if isinstance(child, Gtk.ListBoxRow):
+                row = child.get_child()
+                if hasattr(row, 'cleanup'):
+                    row.cleanup()
+            self.controllers_list.remove(child)
 
         if not self.manager.controllers:
-            self.controllers_group.add(Adw.ActionRow(title="No controllers detected"))
+            row = Adw.ActionRow(title="No controllers detected")
+            self.controllers_list.append(row)
         else:
             for controller in self.manager.controllers.values():
-                self.controllers_group.add(ControllerWidget(controller))
+                self.controllers_list.append(ControllerWidget(controller))
 
     def _update_observer_status(self):
         if not os.path.exists(STATUS_FILE):
@@ -394,12 +404,12 @@ class MainWindow(Adw.ApplicationWindow):
             with open(STATUS_FILE, "r") as f:
                 data = json.load(f)
 
-            while (child := self.controllers_group.get_first_child()):
-                self.controllers_group.remove(child)
+            while (child := self.controllers_list.get_first_child()):
+                self.controllers_list.remove(child)
 
             controllers = data.get("controllers", [])
             if not controllers:
-                self.controllers_group.add(Adw.ActionRow(title="No controllers active in service"))
+                self.controllers_list.append(Adw.ActionRow(title="No controllers active in service"))
             else:
                 for name in controllers:
                     row = Adw.ActionRow(title=name, subtitle="Managed by system service")
@@ -408,7 +418,7 @@ class MainWindow(Adw.ApplicationWindow):
                     badge.add_css_class("success")
                     badge.add_css_class("pill")
                     row.add_suffix(badge)
-                    self.controllers_group.add(row)
+                    self.controllers_list.append(row)
 
             if data.get("steam_blocking"):
                 self.status_page.set_title("Paused (Steam Conflict)")

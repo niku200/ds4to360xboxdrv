@@ -85,9 +85,12 @@ class ControllerWidget(Adw.ActionRow):
             self.status_icon.set_from_icon_name("emblem-important-symbolic")
             self.status_icon.remove_css_class("success")
 
-    def _on_destroy(self, widget):
+    def cleanup(self):
         # Disconnect signals to allow garbage collection
         for signal_name, handler_id in self.handler_ids.items():
             if self.controller.handler_is_connected(handler_id):
                 self.controller.disconnect(handler_id)
         self.handler_ids.clear()
+
+    def _on_destroy(self, widget):
+        self.cleanup()
