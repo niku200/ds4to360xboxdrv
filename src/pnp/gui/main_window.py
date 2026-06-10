@@ -67,10 +67,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.toolbar_view.add_bottom_bar(self.view_switcher_bar)
 
         if not self.is_observer:
-            self.manager.connect('controller-list-changed', self._on_controllers_changed)
+            self.manager_handler_id = self.manager.connect('controller-list-changed', self._on_controllers_changed)
             self._refresh_controllers()
         else:
-            GLib.timeout_add(1000, self._update_observer_status)
+            self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
 
         self.load_config()
         self.start_log_monitor()
@@ -144,6 +144,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_stack.add_titled_with_icon(self.settings_page, "settings", "Settings", "emblem-system-symbolic")
 
     def setup_tester_page(self):
+        self.tester_timer_id = None
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
 
         status_page = Adw.StatusPage(
@@ -176,7 +177,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.active_testers = {} # path -> {row, bars: {code -> progress}}
 
         if not self.is_observer:
-            GLib.timeout_add(100, self._update_tester_list)
+            self.tester_timer_id = GLib.timeout_add(100, self._update_tester_list)
 
     def _update_tester_list(self):
         # Synchronize tester rows with active controllers
@@ -252,14 +253,21 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             with evdev.InputDevice(path) as device:
                 for event in device.read_loop():
-                    if path not in self.active_testers:
+                    # Stop monitoring if the tester for this path is gone or app is closing
+                    if path not in self.active_testers or not self.log_monitor_active:
                         break
+
                     if event.type == evdev.ecodes.EV_ABS:
-                        GLib.idle_add(self._update_tester_bar, path, event.code, event.value, device.absinfo(event.code))
+                        # Throttle UI updates for high-frequency axis events if needed.
+                        # For now, we ensure we only call idle_add if the app is still healthy.
+                        absinfo = device.absinfo(event.code)
+                        GLib.idle_add(self._update_tester_bar, path, event.code, event.value, absinfo)
                     elif event.type == evdev.ecodes.EV_KEY:
                         GLib.idle_add(self._update_tester_button, path, event.code, event.value)
         except Exception as e:
-            logger.error(f"Error reading evdev events from {path}: {e}")
+            # Only log error if it's not a common 'Device vanished' error during shutdown
+            if self.log_monitor_active:
+                logger.debug(f"Info: Stopped monitoring evdev for {path}: {e}")
 
     def _update_tester_button(self, path, code, value):
         if path in self.active_testers:
@@ -307,8 +315,16 @@ class MainWindow(Adw.ApplicationWindow):
         self.log_monitor_active = False
         if hasattr(self, 'log_proc'):
             self.log_proc.terminate()
+
         if not self.is_observer:
+            if hasattr(self, 'manager_handler_id'):
+                self.manager.disconnect(self.manager_handler_id)
+            if hasattr(self, 'tester_timer_id') and self.tester_timer_id:
+                GLib.source_remove(self.tester_timer_id)
             self.manager.stop_all()
+        else:
+            if hasattr(self, 'observer_timer_id'):
+                GLib.source_remove(self.observer_timer_id)
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -413,8 +429,12 @@ class MainWindow(Adw.ApplicationWindow):
                 for line in iter(self.log_proc.stdout.readline, ""):
                     if not self.log_monitor_active:
                         break
-                    GLib.idle_add(self.append_log, line)
-            except: pass
+                    if line:
+                        GLib.idle_add(self.append_log, line)
+                if self.log_proc:
+                    self.log_proc.terminate()
+            except:
+                pass
         threading.Thread(target=monitor, daemon=True).start()
 
     def append_log(self, text):
