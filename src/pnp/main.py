@@ -4,6 +4,12 @@ import argparse
 import logging
 
 def main():
+    # Ensure src directory is in sys.path for robustness
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
     parser = argparse.ArgumentParser(description="PNP (PS NOT PS) – PlayStation to Xbox controller emulator")
     parser.add_argument('--headless', action='store_true', help="Run in headless mode (backend only)")
     parser.add_argument('--debug', action='store_true', help="Enable debug logging")

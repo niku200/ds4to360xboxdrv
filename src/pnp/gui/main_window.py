@@ -673,7 +673,8 @@ class MainWindow(Adw.ApplicationWindow):
     def _update_observer_status(self):
         # Update service switch state without triggering the signal
         active_state, enabled_state = get_service_status()
-        active = active_state == "active"
+        # Treat activating as active to prevent mode-switching flicker
+        active = active_state in ("active", "activating")
 
         self.service_switch.handler_block_by_func(self._on_service_switch_toggled)
         self.service_switch.set_active(active)
@@ -681,13 +682,13 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Force re-evaluation of manager mode if service was started/stopped externally
         if active and not self.is_observer:
-             logger.info("Service detected as active. Switching to observer mode.")
+             logger.info(f"Service detected as {active_state}. Switching to observer mode.")
              if self.manager:
                  self.manager.stop_all()
                  self.manager = None
              self.is_observer = True
         elif not active and self.is_observer:
-             logger.info("Service detected as inactive. Switching to manager mode.")
+             logger.info(f"Service detected as {active_state}. Switching to manager mode.")
              self.is_observer = False
              GLib.idle_add(self._init_backend)
              return False # Stop this timer, _init_backend will restart it
