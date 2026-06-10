@@ -88,6 +88,13 @@ class Controller(GObject.Object):
 
         evsieve_link = f"/dev/input/evsieve_{os.path.basename(self.device_path)}"
 
+        # Ensure the link doesn't exist before starting evsieve
+        if os.path.exists(evsieve_link):
+            try:
+                os.remove(evsieve_link)
+            except:
+                pass
+
         self.evsieve_proc = ProcessRunner(
             f"evsieve-{self.serial}",
             ["evsieve", "--input", self.device_path, "--grab", "--output", f"create-link={evsieve_link}"]
