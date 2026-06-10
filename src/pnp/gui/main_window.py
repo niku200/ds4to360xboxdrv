@@ -531,8 +531,6 @@ class MainWindow(Adw.ApplicationWindow):
             self.observer_timer_id = None
 
         app = self.get_application()
-        if app and hasattr(app, 'indicator') and app.indicator:
-            app.indicator.cleanup()
         if hasattr(self, 'log_proc'):
             try:
                 self.log_proc.terminate()
@@ -560,7 +558,8 @@ class MainWindow(Adw.ApplicationWindow):
         # and all related processes are reaped.
         # Use os._exit to skip cleanup handlers if we are already in destroy
         # to ensure the process actually dies.
-        GLib.timeout_add(100, lambda: os._exit(0))
+        # Increased delay slightly to allow do_shutdown to finish
+        GLib.timeout_add(200, lambda: os._exit(0))
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -825,6 +824,13 @@ class Application(Adw.Application):
         super().__init__(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.indicator = None
         self.steam_check_enabled = True
+
+    def do_shutdown(self):
+        logger.debug("Application shutting down...")
+        if self.indicator:
+            self.indicator.cleanup()
+            self.indicator = None
+        Adw.Application.do_shutdown(self)
 
     def setup_indicator(self):
         try:
