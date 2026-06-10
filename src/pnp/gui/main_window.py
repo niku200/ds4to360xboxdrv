@@ -33,8 +33,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_default_size(900, 700)
 
         # Style Manager for dark theme
-        self.style_manager = Adw.StyleManager.get_default()
-        self.style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
+        style_manager = Adw.StyleManager.get_default()
+        style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
 
         # Main Layout
         self.toolbar_view = Adw.ToolbarView()
@@ -131,10 +131,15 @@ class MainWindow(Adw.ApplicationWindow):
             row.add_suffix(entry)
             map_group.add(row)
 
+        # Standalone Button handling in AdwPreferencesPage
+        # Adw.PreferencesPage.add only takes Adw.PreferencesGroup.
+        # For other widgets, we wrap them in a group without title.
+        btn_group = Adw.PreferencesGroup()
         save_btn = Gtk.Button(label="Save & Apply", halign=Gtk.Align.CENTER, margin_top=24, css_classes=["suggested-action", "pill"])
         save_btn.set_size_request(200, -1)
         save_btn.connect("clicked", self.on_save_clicked)
-        self.settings_page.add(save_btn)
+        btn_group.add(save_btn)
+        self.settings_page.add(btn_group)
 
         self.view_stack.add_titled_with_icon(self.settings_page, "settings", "Settings", "emblem-system-symbolic")
 
