@@ -496,10 +496,27 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_stack.add_titled_with_icon(box, "logs", "Logs", "view-list-bullet-symbolic")
 
     def _on_close_request(self, *args):
-        # By default, AdwWindow might just hide or not exit if part of an app.
-        # We want it to properly destroy and trigger the cleanup.
-        self.destroy()
-        return False
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Exit PNP?",
+            body="Do you want to exit the application completely or keep it running in the background?",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("hide", "Run in Background")
+        dialog.add_response("exit", "Exit")
+        dialog.set_response_appearance("exit", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("hide")
+        dialog.set_close_response("cancel")
+
+        def on_response(d, response):
+            if response == "hide":
+                self.hide()
+            elif response == "exit":
+                self.destroy()
+
+        dialog.connect("response", on_response)
+        dialog.present()
+        return True
 
     def _on_destroy(self, *args):
         logger.debug("MainWindow destroying...")
