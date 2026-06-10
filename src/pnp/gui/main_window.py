@@ -66,6 +66,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_switcher_bar.set_stack(self.view_stack)
         self.toolbar_view.add_bottom_bar(self.view_switcher_bar)
 
+        # Connect destroy signal early
+        self.connect("destroy", self._on_destroy)
+
         if not self.is_observer:
             self.manager_handler_id = self.manager.connect('controller-list-changed', self._on_controllers_changed)
             self._refresh_controllers()
@@ -314,8 +317,6 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.view_stack.add_titled_with_icon(box, "logs", "Logs", "view-list-bullet-symbolic")
 
-        self.connect("destroy", self._on_destroy)
-
     def _on_destroy(self, *args):
         self.log_monitor_active = False
         if hasattr(self, 'log_proc'):
@@ -456,7 +457,11 @@ class MainWindow(Adw.ApplicationWindow):
 
 class Application(Adw.Application):
     def __init__(self, manager):
-        super().__init__(application_id="io.github.pakrohk.pnp", flags=Gio.ApplicationFlags.FLAGS_NONE)
+        # Use a unique application ID to avoid registration conflicts
+        app_id = "io.github.pakrohk.pnp"
+        if os.environ.get("DEBUG"):
+            app_id += ".debug"
+        super().__init__(application_id=app_id, flags=Gio.ApplicationFlags.FLAGS_NONE)
         self.manager = manager
         self.missing_deps = []
         self.indicator = None
@@ -481,12 +486,16 @@ class Application(Adw.Application):
     def on_quit_activate(self, _):
         self.quit()
 
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        # Initialize the tray in startup, but safely
+        GLib.idle_add(self.setup_indicator)
+
     def do_activate(self):
         try:
             win = self.get_active_window()
             if not win:
                 win = MainWindow(self.manager, application=self)
-                self.setup_indicator()
 
             win.present()
 

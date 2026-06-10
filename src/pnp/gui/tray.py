@@ -93,8 +93,15 @@ class StatusNotifierItem:
             f"org.kde.StatusNotifierItem-{os.getpid()}-1",
             Gio.BusNameOwnerFlags.NONE,
             self.on_bus_acquired,
-            None, None
+            self._on_name_acquired,
+            self._on_name_lost
         )
+
+    def _on_name_acquired(self, conn, name):
+        logger.debug(f"SNI name acquired: {name}")
+
+    def _on_name_lost(self, conn, name):
+        logger.debug(f"SNI name lost: {name}")
 
     def on_bus_acquired(self, connection, name):
         connection.register_object(
@@ -151,11 +158,18 @@ class StatusNotifierItem:
         return props.get(property_name)
 
     def register_with_watcher(self, connection):
+        def on_call_done(conn, res):
+            try:
+                conn.call_finish(res)
+                logger.debug("SNI successfully registered with watcher.")
+            except Exception as e:
+                logger.debug(f"SNI registration failed (optional): {e}")
+
         connection.call(
             "org.kde.StatusNotifierWatcher",
             "/StatusNotifierWatcher",
             "org.kde.StatusNotifierWatcher",
             "RegisterStatusNotifierItem",
             GLib.Variant("(s)", ["/StatusNotifierItem"]),
-            None, Gio.DBusCallFlags.NONE, -1, None, None
+            None, Gio.DBusCallFlags.NONE, -1, None, on_call_done
         )
