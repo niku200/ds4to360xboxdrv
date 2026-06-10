@@ -1,4 +1,5 @@
 import pyudev
+import pyudev.glib
 import logging
 from gi.repository import GObject, GLib
 
