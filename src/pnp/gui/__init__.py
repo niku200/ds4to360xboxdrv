@@ -41,10 +41,13 @@ def main():
     # We let the Application handle its own lifecycle.
     try:
         app = Application()
-        return app.run(sys.argv)
+        res = app.run(sys.argv)
+        # Ensure we exit completely even if some threads are still hanging around
+        # (like the journalctl monitor)
+        os._exit(res)
     except Exception as e:
         logger.critical(f"Unhandled exception in GUI: {e}", exc_info=True)
-        return 1
+        os._exit(1)
 
 if __name__ == "__main__":
     main()

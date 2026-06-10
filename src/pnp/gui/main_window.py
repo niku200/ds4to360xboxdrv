@@ -13,13 +13,25 @@ try:
 except ImportError:
     evdev = None
 
-def is_service_active():
+def get_service_status():
     import subprocess
     try:
+        # Check active state
         res = subprocess.run(["systemctl", "is-active", "pnp.service"], capture_output=True, text=True)
-        return res.stdout.strip() == "active"
-    except:
-        return False
+        active_state = res.stdout.strip()
+
+        # Check if enabled
+        res_enabled = subprocess.run(["systemctl", "is-enabled", "pnp.service"], capture_output=True, text=True)
+        enabled_state = res_enabled.stdout.strip()
+
+        return active_state, enabled_state
+    except Exception as e:
+        logger.debug(f"Error getting service status: {e}")
+        return "unknown", "unknown"
+
+def is_service_active():
+    active, _ = get_service_status()
+    return active == "active"
 
 def check_dependencies():
     import shutil
@@ -496,10 +508,27 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_stack.add_titled_with_icon(box, "logs", "Logs", "view-list-bullet-symbolic")
 
     def _on_close_request(self, *args):
-        # By default, AdwWindow might just hide or not exit if part of an app.
-        # We want it to properly destroy and trigger the cleanup.
-        self.destroy()
-        return False
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            heading="Exit PNP?",
+            body="Do you want to exit the application completely or keep it running in the background?",
+        )
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("hide", "Run in Background")
+        dialog.add_response("exit", "Exit")
+        dialog.set_response_appearance("exit", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("hide")
+        dialog.set_close_response("cancel")
+
+        def on_response(d, response):
+            if response == "hide":
+                self.hide()
+            elif response == "exit":
+                self.destroy()
+
+        dialog.connect("response", on_response)
+        dialog.present()
+        return True
 
     def _on_destroy(self, *args):
         logger.debug("MainWindow destroying...")
@@ -513,29 +542,20 @@ class MainWindow(Adw.ApplicationWindow):
             GLib.source_remove(self.observer_timer_id)
             self.observer_timer_id = None
 
-        app = self.get_application()
-        if app and hasattr(app, 'indicator') and app.indicator:
-            app.indicator.cleanup()
-        if hasattr(self, 'log_proc'):
-            try:
-                self.log_proc.terminate()
-            except:
-                pass
-
         if hasattr(self, 'manager') and self.manager:
             if hasattr(self, 'manager_handler_id'):
                 self.manager.disconnect(self.manager_handler_id)
             if not self.is_observer:
                 self.manager.stop_all()
 
-        if hasattr(self, 'tester_timer_id') and self.tester_timer_id:
-            GLib.source_remove(self.tester_timer_id)
-            self.tester_timer_id = None
+        if hasattr(self, 'log_proc'):
+            try:
+                # Use SIGKILL to ensure log monitor dies immediately
+                self.log_proc.kill()
+            except:
+                pass
 
-        if hasattr(self, 'observer_timer_id') and self.observer_timer_id:
-            GLib.source_remove(self.observer_timer_id)
-            self.observer_timer_id = None
-
+        app = self.get_application()
         if app:
             app.quit()
 
@@ -543,7 +563,8 @@ class MainWindow(Adw.ApplicationWindow):
         # and all related processes are reaped.
         # Use os._exit to skip cleanup handlers if we are already in destroy
         # to ensure the process actually dies.
-        GLib.timeout_add(100, lambda: os._exit(0))
+        # Increased delay slightly to allow do_shutdown to finish
+        GLib.timeout_add(500, lambda: os._exit(0))
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -651,13 +672,29 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _update_observer_status(self):
         # Update service switch state without triggering the signal
-        active = is_service_active()
+        active_state, enabled_state = get_service_status()
+        # Treat activating as active to prevent mode-switching flicker
+        active = active_state in ("active", "activating")
+
         self.service_switch.handler_block_by_func(self._on_service_switch_toggled)
         self.service_switch.set_active(active)
         self.service_switch.handler_unblock_by_func(self._on_service_switch_toggled)
 
+        # Force re-evaluation of manager mode if service was started/stopped externally
+        if active and not self.is_observer:
+             logger.info(f"Service detected as {active_state}. Switching to observer mode.")
+             if self.manager:
+                 self.manager.stop_all()
+                 self.manager = None
+             self.is_observer = True
+        elif not active and self.is_observer:
+             logger.info(f"Service detected as {active_state}. Switching to manager mode.")
+             self.is_observer = False
+             GLib.idle_add(self._init_backend)
+             return False # Stop this timer, _init_backend will restart it
+
         if not active:
-            self.status_page.set_title("Service Offline")
+            self.status_page.set_title(f"Service {active_state.title()}")
             while (child := self.controllers_list.get_first_child()):
                 self.controllers_list.remove(child)
             self.controllers_list.append(Adw.ActionRow(title="Service is not running"))
@@ -805,9 +842,16 @@ class Application(Adw.Application):
     def __init__(self):
         # Use NON_UNIQUE flag to completely avoid registration timeouts and DBus locks.
         # This allows the GUI to always start immediately as a shell.
-        super().__init__(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
+        super().__init__(application_id="ir.pakrohk.pnp", flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.indicator = None
         self.steam_check_enabled = True
+
+    def do_shutdown(self):
+        logger.debug("Application shutting down...")
+        if self.indicator:
+            self.indicator.cleanup()
+            self.indicator = None
+        Adw.Application.do_shutdown(self)
 
     def setup_indicator(self):
         try:

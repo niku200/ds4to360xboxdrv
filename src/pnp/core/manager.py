@@ -35,12 +35,19 @@ class ControllerManager(GObject.Object):
         changed = False
         for path, controller in list(self.controllers.items()):
             if controller.is_active:
-                if (controller.evsieve_proc and not controller.evsieve_proc.is_running()) or \
-                   (controller.xboxdrv_proc and not controller.xboxdrv_proc.is_running()):
+                evsieve_died = controller.evsieve_proc and not controller.evsieve_proc.is_running()
+                xboxdrv_died = controller.xboxdrv_proc and not controller.xboxdrv_proc.is_running()
+                if evsieve_died or xboxdrv_died:
                     # Throttled restart log
                     msg = f"Controller processes for {controller.name} died unexpectedly. Restarting."
                     if not hasattr(self, '_last_warn') or self._last_warn != msg:
                         logger.warning(msg)
+                        if evsieve_died:
+                            err = controller.evsieve_proc.get_stderr()
+                            if err: logger.error(f"evsieve error: {err.strip()}")
+                        if xboxdrv_died:
+                            err = controller.xboxdrv_proc.get_stderr()
+                            if err: logger.error(f"xboxdrv error: {err.strip()}")
                         self._last_warn = msg
                     controller.stop()
                     if not self.steam_paused:

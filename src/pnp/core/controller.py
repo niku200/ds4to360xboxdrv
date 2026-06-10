@@ -101,7 +101,7 @@ class Controller(GObject.Object):
 
         self.evsieve_proc = ProcessRunner(
             f"evsieve-{self.serial}",
-            ["evsieve", "--input", self.device_path, "--grab", "--output", f"create-link={evsieve_link}"]
+            ["evsieve", "--input", self.device_path, "grab", "--output", f"create-link={evsieve_link}"]
         )
         self.evsieve_proc.start()
 

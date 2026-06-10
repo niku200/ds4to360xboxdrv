@@ -50,6 +50,7 @@ SNI_INTERFACE = """
       <arg name="parentId" type="i" direction="in"/>
       <arg name="recursionDepth" type="i" direction="in"/>
       <arg name="propertyNames" type="as" direction="in"/>
+      <arg name="revision" type="u" direction="out"/>
       <arg name="layout" type="(ia{sv}av)" direction="out"/>
     </method>
     <method name="GetGroupProperties">
@@ -91,7 +92,7 @@ class StatusNotifierItem:
         self.bus_id = Gio.bus_own_name(
             Gio.BusType.SESSION,
             f"org.kde.StatusNotifierItem-{os.getpid()}-1",
-            Gio.BusNameOwnerFlags.NONE,
+            Gio.BusNameOwnerFlags.ALLOW_REPLACEMENT | Gio.BusNameOwnerFlags.REPLACE,
             self.on_bus_acquired,
             self._on_name_acquired,
             self._on_name_lost
