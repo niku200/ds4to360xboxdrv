@@ -35,20 +35,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def is_service_active():
-    try:
-        res = subprocess.run(["systemctl", "is-active", "pnp.service"], capture_output=True, text=True)
-        return res.stdout.strip() == "active"
-    except:
-        return False
-
-def check_dependencies():
-    missing = []
-    if not shutil.which('xboxdrv'):
-        missing.append('xboxdrv')
-    if not shutil.which('evsieve'):
-        missing.append('evsieve')
-    return missing
 
 def main():
     # The GUI should be a shell. We don't start the manager here.

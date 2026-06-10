@@ -13,7 +13,23 @@ try:
 except ImportError:
     evdev = None
 
-from pnp.gui.__init__ import is_service_active, check_dependencies
+def is_service_active():
+    import subprocess
+    try:
+        res = subprocess.run(["systemctl", "is-active", "pnp.service"], capture_output=True, text=True)
+        return res.stdout.strip() == "active"
+    except:
+        return False
+
+def check_dependencies():
+    import shutil
+    missing = []
+    if not shutil.which('xboxdrv'):
+        missing.append('xboxdrv')
+    if not shutil.which('evsieve'):
+        missing.append('evsieve')
+    return missing
+
 from pnp.gui.controller_widget import ControllerWidget
 from pnp.gui.tray import StatusNotifierItem
 
@@ -93,6 +109,8 @@ class MainWindow(Adw.ApplicationWindow):
 
             if self.is_observer:
                 self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
+            else:
+                self.tester_timer_id = GLib.timeout_add(100, self._update_tester_list)
 
             # Check dependencies
             missing = check_dependencies()
@@ -208,9 +226,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_stack.add_titled_with_icon(scroll, "tester", "Tester", "preferences-desktop-peripherals-symbolic")
 
         self.active_testers = {} # path -> {row, bars: {code -> progress}}
-
-        if not self.is_observer:
-            self.tester_timer_id = GLib.timeout_add(100, self._update_tester_list)
 
     def _update_tester_list(self):
         # Synchronize tester rows with active controllers
