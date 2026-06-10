@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # --- Thanks & Introduction ---
 echo "----------------------------------------------------"
@@ -18,13 +18,13 @@ CONFIG_PATH="/etc/pnp/pnp.conf"
 identify_distro_and_install_deps() {
     echo "Checking for system dependencies..."
 
-    if command -v pacman &> /dev/null; then
-        sudo pacman -S --noconfirm --needed xboxdrv evsieve python-gobject gtk4 libadwaita python-evdev
-    elif command -v dnf &> /dev/null; then
-        sudo dnf install -y xboxdrv evsieve python3-gobject gtk4 libadwaita python3-evdev python3-virtualenv
-    elif command -v apt &> /dev/null; then
+    if command -v pacman > /dev/null 2>&1; then
+        sudo pacman -S --noconfirm --needed xboxdrv evsieve python-gobject gtk4 libadwaita python-evdev python-pyudev
+    elif command -v dnf > /dev/null 2>&1; then
+        sudo dnf install -y xboxdrv evsieve python3-gobject gtk4 libadwaita python3-evdev python3-pyudev python3-virtualenv
+    elif command -v apt > /dev/null 2>&1; then
         sudo apt update
-        sudo apt install -y xboxdrv evsieve python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev python3-venv
+        sudo apt install -y xboxdrv evsieve python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev python3-pyudev python3-venv
     else
         echo "Please manually install: xboxdrv, evsieve, python-gobject, gtk4, libadwaita, python-evdev"
     fi
@@ -52,23 +52,22 @@ python3 -m venv --system-site-packages "$SHARE_DIR/venv"
 # Create robust wrapper scripts
 echo "Installing wrapper scripts..."
 cat <<EOF > /usr/bin/pnp-gui
-#!/bin/bash
-export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
-exec "$SHARE_DIR/venv/bin/python3" -m pnp.gui "\$@"
+#!/bin/sh
+export PYTHONPATH="$SHARE_DIR:\$PYTHONPATH"
+exec "$SHARE_DIR/venv/bin/python3" -m pnp.main "\$@"
 EOF
-chmod +x /usr/bin/pnp-gui
+chmod 755 /usr/bin/pnp-gui
 
 cat <<EOF > /usr/bin/pnp-backend
-#!/bin/bash
-export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
-exec "$SHARE_DIR/venv/bin/python3" -m pnp.backend "\$@"
+#!/bin/sh
+export PYTHONPATH="$SHARE_DIR:\$PYTHONPATH"
+exec "$SHARE_DIR/venv/bin/python3" -m pnp.main --headless "\$@"
 EOF
-chmod +x /usr/bin/pnp-backend
+chmod 755 /usr/bin/pnp-backend
 
 # Install system components
 echo "Installing system components..."
 cp pnp.service "$SYSTEMD_SERVICE_DIR/"
-sed -i "s|ExecStart=.*|ExecStart=/usr/bin/pnp-backend|" "$SYSTEMD_SERVICE_DIR/pnp.service"
 
 cp 99-pnp.rules "$UDEV_RULES_DIR/"
 cp pnp.desktop "/usr/share/applications/"

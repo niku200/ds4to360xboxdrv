@@ -35,7 +35,19 @@ class DeviceMonitor(GObject.Object):
 
     def _is_sony_controller(self, device):
         vendor = device.get('ID_VENDOR_ID')
-        return vendor in self.SONY_VENDORS and device.get('ID_INPUT_JOYSTICK') == '1' and device.device_node and "event" in device.device_node
+        # Check if it's a Sony vendor ID and a joystick
+        is_sony = vendor in self.SONY_VENDORS and device.get('ID_INPUT_JOYSTICK') == '1'
+
+        # Avoid recursive detection: ignore virtual/emulated devices
+        # Physical devices MUST have ID_BUS set to usb or bluetooth
+        bus = device.get('ID_BUS')
+        is_physical = bus in ['usb', 'bluetooth']
+
+        model_name = device.get('ID_MODEL', '').lower()
+        # Explicitly exclude common emulated strings
+        is_emulated = 'evsieve' in model_name or 'xbox' in model_name or 'microsoft' in model_name
+
+        return is_sony and is_physical and not is_emulated and device.device_node and "event" in device.device_node
 
     def _on_device_event(self, observer, device):
         action = device.action
@@ -48,7 +60,13 @@ class DeviceMonitor(GObject.Object):
         path = device.device_node
         name = device.get('ID_MODEL', 'Unknown Sony Controller')
         serial = device.get('ID_SERIAL_SHORT', '0000')
-        logger.info(f"Controller added: {name} at {path}")
+
+        # Deduplicate log
+        msg = f"Controller added: {name} at {path}"
+        if not hasattr(self, '_last_add') or self._last_add != msg:
+            logger.info(msg)
+            self._last_add = msg
+
         self.emit('controller-added', path, name, serial)
 
     def _remove_device(self, device):

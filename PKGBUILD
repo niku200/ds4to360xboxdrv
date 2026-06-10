@@ -27,12 +27,23 @@ package() {
   # Install the wheel
   python -m installer --destdir="$pkgdir" --prefix=/usr dist/*.whl
 
-  # Fix shebangs in /usr/bin scripts to use system python3
-  sed -i '1s|#!.*|#!/usr/bin/python3|' "$pkgdir"/usr/bin/pnp-*
+  # Fix shebangs and set PYTHONPATH in /usr/bin scripts
+  cat <<EOF > "$pkgdir/usr/bin/pnp-gui"
+#!/bin/sh
+export PYTHONPATH="/usr/share/pnp:\$PYTHONPATH"
+exec /usr/bin/python3 -m pnp.main "\$@"
+EOF
+  chmod 755 "$pkgdir/usr/bin/pnp-gui"
+
+  cat <<EOF > "$pkgdir/usr/bin/pnp-backend"
+#!/bin/sh
+export PYTHONPATH="/usr/share/pnp:\$PYTHONPATH"
+exec /usr/bin/python3 -m pnp.main --headless "\$@"
+EOF
+  chmod 755 "$pkgdir/usr/bin/pnp-backend"
 
   # Install systemd service
   install -Dm644 ../pnp.service "${pkgdir}/usr/lib/systemd/system/pnp.service"
-  sed -i "s|ExecStart=.*|ExecStart=/usr/bin/pnp-backend|" "${pkgdir}/usr/lib/systemd/system/pnp.service"
 
   # Install udev rules
   install -Dm644 ../99-pnp.rules "${pkgdir}/usr/lib/udev/rules.d/99-pnp.rules"

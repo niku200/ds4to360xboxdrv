@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # PNP Package Builder Script
 # Automates the creation of DEB, RPM, and Pacman packages.
@@ -22,60 +22,67 @@ fi
 
 build_deb() {
     echo "Building Debian package..."
-    if [[ "$DOCKER" == "true" ]]; then
-        docker run --rm -v "$(pwd)":/build -w /build debian:bullseye sh -c "
+    if [ "$DOCKER" = "true" ]; then
+        docker run --rm -v "$(pwd)":/build -w /build debian:bookworm sh -c "
             apt update && apt install -y debhelper python3-all python3-pip python3-venv curl
             curl -sSf https://rye-up.com/get | RYE_INSTALL_OPTION='--yes' bash
-            source \$HOME/.rye/env
+            . \$HOME/.rye/env
             dpkg-buildpackage -us -uc -b"
     else
-        if ! command -v dpkg-buildpackage &> /dev/null; then
+        if ! command -v dpkg-buildpackage > /dev/null 2>&1; then
             echo "Error: dpkg-buildpackage not found. Install 'dpkg-dev' or run with --docker."
             return 1
         fi
         dpkg-buildpackage -us -uc -b
     fi
-    mv ../pnp_${VERSION}_*.deb "$OUTPUT_DIR/" 2>/dev/null || true
+    # Use glob carefully in POSIX sh, it should work if file exists
+    for f in ../pnp_${VERSION}_*.deb; do
+        if [ -f "$f" ]; then mv "$f" "$OUTPUT_DIR/"; fi
+    done
 }
 
 build_rpm() {
     echo "Building RPM package..."
-    if [[ "$DOCKER" == "true" ]]; then
+    if [ "$DOCKER" = "true" ]; then
         docker run --rm -v "$(pwd)":/build -w /build fedora:latest sh -c "
             dnf install -y rpm-build python3-devel curl
             curl -sSf https://rye-up.com/get | RYE_INSTALL_OPTION='--yes' bash
-            source \$HOME/.rye/env
+            . \$HOME/.rye/env
             mkdir -p ~/rpmbuild/SOURCES
             cp $SOURCE_TARBALL ~/rpmbuild/SOURCES/
             rpmbuild -ba pnp.spec"
     else
-        if ! command -v rpmbuild &> /dev/null; then
+        if ! command -v rpmbuild > /dev/null 2>&1; then
             echo "Error: rpmbuild not found. Install 'rpm-build' or run with --docker."
             return 1
         fi
-        mkdir -p ~/rpmbuild/SOURCES
-        cp "$SOURCE_TARBALL" ~/rpmbuild/SOURCES/
+        mkdir -p "$HOME/rpmbuild/SOURCES"
+        cp "$SOURCE_TARBALL" "$HOME/rpmbuild/SOURCES/"
         rpmbuild -ba pnp.spec
     fi
-    mv ~/rpmbuild/RPMS/*/*.rpm "$OUTPUT_DIR/" 2>/dev/null || true
+    for f in "$HOME"/rpmbuild/RPMS/*/*.rpm; do
+        if [ -f "$f" ]; then mv "$f" "$OUTPUT_DIR/"; fi
+    done
 }
 
 build_arch() {
     echo "Building Arch Linux package..."
-    if [[ "$DOCKER" == "true" ]]; then
+    if [ "$DOCKER" = "true" ]; then
         docker run --rm -v "$(pwd)":/build -w /build archlinux:latest sh -c "
             pacman -Syu --noconfirm base-devel python curl
             useradd -m builduser
             chown -R builduser:builduser /build
-            sudo -u builduser bash -c 'curl -sSf https://rye-up.com/get | RYE_INSTALL_OPTION=\"--yes\" bash && source \$HOME/.rye/env && makepkg -f'"
+            sudo -u builduser bash -c 'curl -sSf https://rye-up.com/get | RYE_INSTALL_OPTION=\"--yes\" bash && . \$HOME/.rye/env && makepkg -f'"
     else
-        if ! command -v makepkg &> /dev/null; then
+        if ! command -v makepkg > /dev/null 2>&1; then
             echo "Error: makepkg not found. Run with --docker."
             return 1
         fi
         makepkg -f
     fi
-    mv pnp-*.pkg.tar.zst "$OUTPUT_DIR/" 2>/dev/null || true
+    for f in pnp-*.pkg.tar.zst; do
+        if [ -f "$f" ]; then mv "$f" "$OUTPUT_DIR/"; fi
+    done
 }
 
 cleanup() {
@@ -84,7 +91,7 @@ cleanup() {
 }
 
 DOCKER="false"
-if [[ "$1" == "--docker" ]]; then
+if [ "$1" = "--docker" ]; then
     DOCKER="true"
     shift
 fi

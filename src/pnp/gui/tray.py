@@ -93,8 +93,15 @@ class StatusNotifierItem:
             f"org.kde.StatusNotifierItem-{os.getpid()}-1",
             Gio.BusNameOwnerFlags.NONE,
             self.on_bus_acquired,
-            None, None
+            self._on_name_acquired,
+            self._on_name_lost
         )
+
+    def _on_name_acquired(self, conn, name):
+        logger.debug(f"SNI name acquired: {name}")
+
+    def _on_name_lost(self, conn, name):
+        logger.debug(f"SNI name lost: {name}")
 
     def on_bus_acquired(self, connection, name):
         connection.register_object(
@@ -120,20 +127,30 @@ class StatusNotifierItem:
 
     def handle_menu_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
         if method_name == "GetLayout":
-            # Simple menu: 0: root, 1: Show, 2: Quit
+            # root, 1: Show, 2: Steam Toggle, 3: separator, 4: Quit
+            steam_state = "Enabled" if getattr(self.app, 'steam_check_enabled', True) else "Disabled"
             layout = (
                 0,
                 {"children-display": GLib.Variant("s", "submenu")},
                 [
-                    GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP")}, [])),
-                    GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", "Quit")}, []))
+                    GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP Interface")}, [])),
+                    GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", f"Steam Pause: {steam_state}")}, [])),
+                    GLib.Variant("(ia{sv}av)", (3, {"type": GLib.Variant("s", "separator")}, [])),
+                    GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Exit Application")}, []))
                 ]
             )
-            invocation.return_value(GLib.Variant("(ia{sv}av)", layout))
+            # The interface signature is (ia{sv}av), but GetLayout returns (u(ia{sv}av))
+            # Wait, the XML says (ia{sv}av) is the output.
+            # Let's try wrapping it in another tuple if needed by the caller.
+            invocation.return_value(GLib.Variant("((ia{sv}av))", (layout,)))
         elif method_name == "Event":
             id, event_id, data, timestamp = parameters
-            if id == 1: GLib.idle_add(self.app.on_show_activate, None)
-            elif id == 2: GLib.idle_add(self.app.on_quit_activate, None)
+            if id == 1:
+                GLib.idle_add(self.app.on_show_activate, None)
+            elif id == 2:
+                GLib.idle_add(self.app.on_toggle_steam_check, None)
+            elif id == 4:
+                GLib.idle_add(self.app.on_quit_activate, None)
             invocation.return_value(None)
         else:
             invocation.return_value(None)
@@ -150,12 +167,37 @@ class StatusNotifierItem:
         }
         return props.get(property_name)
 
+    def update_menu(self):
+        # Notify that layout has changed
+        bus = Gio.BusType.SESSION
+        Gio.bus_get(bus, None, self._on_bus_ready_for_signal)
+
+    def _on_bus_ready_for_signal(self, _, res):
+        try:
+            conn = Gio.bus_get_finish(res)
+            conn.emit_signal(
+                None,
+                "/MenuBar",
+                "com.canonical.dbusmenu",
+                "LayoutUpdated",
+                GLib.Variant("(ui)", (0, 0))
+            )
+        except:
+            pass
+
     def register_with_watcher(self, connection):
+        def on_call_done(conn, res):
+            try:
+                conn.call_finish(res)
+                logger.debug("SNI successfully registered with watcher.")
+            except Exception as e:
+                logger.debug(f"SNI registration failed (optional): {e}")
+
         connection.call(
             "org.kde.StatusNotifierWatcher",
             "/StatusNotifierWatcher",
             "org.kde.StatusNotifierWatcher",
             "RegisterStatusNotifierItem",
             GLib.Variant("(s)", ["/StatusNotifierItem"]),
-            None, Gio.DBusCallFlags.NONE, -1, None, None
+            None, Gio.DBusCallFlags.NONE, -1, None, on_call_done
         )

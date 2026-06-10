@@ -7,11 +7,28 @@ import configparser
 import logging
 import tempfile
 from typing import Optional, List
-from gi.repository import Gtk, Adw, GLib, Gio
+from gi.repository import Gtk, Adw, GLib, Gio, Gdk
 try:
     import evdev
 except ImportError:
     evdev = None
+
+def is_service_active():
+    import subprocess
+    try:
+        res = subprocess.run(["systemctl", "is-active", "pnp.service"], capture_output=True, text=True)
+        return res.stdout.strip() == "active"
+    except:
+        return False
+
+def check_dependencies():
+    import shutil
+    missing = []
+    if not shutil.which('xboxdrv'):
+        missing.append('xboxdrv')
+    if not shutil.which('evsieve'):
+        missing.append('evsieve')
+    return missing
 
 from pnp.gui.controller_widget import ControllerWidget
 from pnp.gui.tray import StatusNotifierItem
@@ -24,17 +41,17 @@ CONFIG_PATH = "/etc/pnp/pnp.conf"
 LEGACY_CONFIG_PATH = "/etc/ds4to360.conf"
 
 class MainWindow(Adw.ApplicationWindow):
-    def __init__(self, manager, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.manager = manager
-        self.is_observer = manager is None
+        self.manager = None
+        self.is_observer = True
 
         self.set_title("PNP – PS NOT PS")
         self.set_default_size(900, 700)
 
         # Style Manager for dark theme
-        style_manager = Adw.StyleManager.get_default()
-        style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
+        self.style_manager = Adw.StyleManager.get_default()
+        self.style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
 
         # Main Layout
         self.toolbar_view = Adw.ToolbarView()
@@ -66,14 +83,47 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_switcher_bar.set_stack(self.view_stack)
         self.toolbar_view.add_bottom_bar(self.view_switcher_bar)
 
-        if not self.is_observer:
-            self.manager.connect('controller-list-changed', self._on_controllers_changed)
-            self._refresh_controllers()
-        else:
-            GLib.timeout_add(1000, self._update_observer_status)
+        # Connect destroy signal early
+        self.connect("destroy", self._on_destroy)
+
+        # Defer manager initialization to background to keep UI responsive
+        GLib.idle_add(self._init_backend)
 
         self.load_config()
+        self.setup_css()
         self.start_log_monitor()
+
+    def _init_backend(self):
+        try:
+            if is_service_active():
+                logger.info("Service is active. GUI running in observer mode.")
+                self.is_observer = True
+                self.manager = None
+            else:
+                logger.info("Service inactive. Starting local manager.")
+                from pnp.core.manager import ControllerManager
+                self.is_observer = False
+                self.manager = ControllerManager()
+                self.manager.start()
+                self.manager_handler_id = self.manager.connect('controller-list-changed', self._on_controllers_changed)
+                self._refresh_controllers()
+
+            if self.is_observer:
+                self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
+
+            # Tester update is always useful, but let's run it at a reasonable rate
+            self.tester_timer_id = GLib.timeout_add(2000, self._update_tester_list)
+            # Run once immediately
+            self._update_tester_list()
+
+            # Check dependencies
+            missing = check_dependencies()
+            if missing:
+                self.show_toast(f"Missing dependencies: {', '.join(missing)}")
+        except Exception as e:
+            logger.error(f"Failed to initialize backend: {e}")
+            self.show_toast("Backend initialization failed. See logs.")
+        return False
 
     def setup_status_page(self):
         page_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -92,6 +142,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.controllers_group = Adw.PreferencesGroup(title="Active Controllers")
         box.append(self.controllers_group)
+
+        self.controllers_list = Gtk.ListBox()
+        self.controllers_list.add_css_class("boxed-list")
+        self.controllers_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.controllers_group.add(self.controllers_list)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_child(page_box)
@@ -144,6 +199,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_stack.add_titled_with_icon(self.settings_page, "settings", "Settings", "emblem-system-symbolic")
 
     def setup_tester_page(self):
+        self.tester_timer_id = None
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
 
         status_page = Adw.StatusPage(
@@ -175,19 +231,34 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.active_testers = {} # path -> {row, bars: {code -> progress}}
 
-        if not self.is_observer:
-            GLib.timeout_add(100, self._update_tester_list)
-
     def _update_tester_list(self):
         # Synchronize tester rows with active controllers
         active_paths = set()
-        for controller in self.manager.controllers.values():
-            if controller.is_active:
-                evsieve_link = f"/dev/input/evsieve_{os.path.basename(controller.device_path)}"
-                if os.path.exists(evsieve_link):
-                    active_paths.add(evsieve_link)
-                    if evsieve_link not in self.active_testers:
-                        self._add_tester_row(evsieve_link, controller.name)
+
+        # Only iterate manager controllers if we have a manager (manager mode)
+        if self.manager:
+            for controller in list(self.manager.controllers.values()):
+                if controller.is_active:
+                    link_id = f"{controller.serial}_{os.path.basename(controller.device_path)}"
+                    evsieve_link = f"/dev/input/evsieve_{link_id}"
+                    if os.path.exists(evsieve_link):
+                        active_paths.add(evsieve_link)
+                        if evsieve_link not in self.active_testers:
+                            self._add_tester_row(evsieve_link, controller.name)
+
+        # Add virtual Xbox 360 controllers (output of xboxdrv)
+        # These usually appear as /dev/input/js* or /dev/input/event*
+        # but with 'Microsoft' or 'Xbox 360' in their name.
+        import pyudev
+        ctx = pyudev.Context()
+        for device in ctx.list_devices(subsystem='input', ID_INPUT_JOYSTICK='1'):
+            model = device.get('ID_MODEL', '').lower()
+            if 'xbox' in model or 'microsoft' in model:
+                path = device.device_node
+                if path and path not in active_paths:
+                    active_paths.add(path)
+                    if path not in self.active_testers:
+                        self._add_tester_row(path, f"Virtual: {device.get('ID_MODEL', 'Xbox 360 Controller')}")
 
         # Remove stale testers
         for path in list(self.active_testers.keys()):
@@ -203,39 +274,91 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def _add_tester_row(self, path, name):
-        row = Adw.ActionRow(title=name, subtitle=f"Virtual device: {path}")
-        row.add_prefix(Gtk.Image.new_from_icon_name("emblem-ok-symbolic"))
+        is_virtual = "Virtual" in name
+        row = Adw.ActionRow(title=name, subtitle=f"Device: {path}")
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=6, margin_bottom=6)
+        icon = "input-gaming-symbolic" if not is_virtual else "controller-symbolic"
+        row.add_prefix(Gtk.Image.new_from_icon_name(icon))
 
-        # Grid for axes
-        grid = Gtk.Grid(column_spacing=12, row_spacing=6)
-        main_box.append(grid)
+        badge = Gtk.Label(label="Virtual" if is_virtual else "Physical")
+        badge.add_css_class("pill")
+        badge.add_css_class("info" if is_virtual else "success")
+        row.add_suffix(badge)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24, margin_top=6, margin_bottom=6)
+
+        # Left: Controller Visualizer
+        viz_grid = Gtk.Grid(column_spacing=8, row_spacing=8)
+        viz_grid.set_halign(Gtk.Align.CENTER)
+        viz_grid.set_valign(Gtk.Align.CENTER)
+
+        viz_buttons = {}
+        def add_viz(label, code, row, col):
+            lbl = Gtk.Label(label=label)
+            lbl.add_css_class("controller-btn")
+            lbl.add_css_class("dim-label")
+            lbl.set_size_request(32, 32)
+            viz_grid.attach(lbl, col, row, 1, 1)
+            viz_buttons[code] = lbl
+
+        # Advanced Controller Visualizer Grid (5x7)
+        # Col 0: Left Shoulder/Trigger
+        # Col 1-2: D-Pad & Left Stick
+        # Col 3: Function buttons (Center)
+        # Col 4-5: Action buttons & Right Stick
+        # Col 6: Right Shoulder/Trigger
+
+        # Action Buttons (Diamond)
+        add_viz("Y", 308, 1, 5)
+        add_viz("X", 307, 2, 4)
+        add_viz("B", 305, 2, 6)
+        add_viz("A", 304, 3, 5)
+
+        # D-Pad
+        add_viz("DU", 16, 1, 1)
+        add_viz("DL", 18, 2, 0)
+        add_viz("DR", 19, 2, 2)
+        add_viz("DD", 17, 3, 1)
+
+        # Function Buttons
+        add_viz("Bk", 314, 2, 3)
+        add_viz("G", 316, 1, 3)
+        add_viz("St", 315, 3, 3)
+
+        # Shoulders
+        add_viz("LB", 310, 0, 1)
+        add_viz("RB", 311, 0, 5)
+
+        # Thumbstick Clicks
+        add_viz("L3", 317, 4, 1)
+        add_viz("R3", 318, 4, 5)
+
+        # D-pad (usually 16 or Hat) - for now just buttons if available
+        # In xboxdrv mapping, dpad usually mapped to keys or hat
+        # We can add them if they come through as keys
+
+        main_box.append(viz_grid)
+
+        # Right: Bars
+        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
+        grid = Gtk.Grid(column_spacing=12, row_spacing=4)
+        right_box.append(grid)
 
         bars = {}
         axes = [("LX", 0), ("LY", 1), ("RX", 2), ("RY", 3), ("LT", 4), ("RT", 5)]
         for i, (label, code) in enumerate(axes):
             lbl = Gtk.Label(label=label)
-            lbl.set_halign(Gtk.Align.START)
+            lbl.add_css_class("caption")
             progress = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
             progress.set_fraction(0.5 if i < 4 else 0.0)
             grid.attach(lbl, 0, i, 1, 1)
             grid.attach(progress, 1, i, 1, 1)
             bars[code] = progress
 
-        # Buttons flowbox
-        button_flowbox = Gtk.FlowBox(valign=Gtk.Align.CENTER, max_children_per_line=11, selection_mode=Gtk.SelectionMode.NONE)
-        main_box.append(button_flowbox)
+        main_box.append(right_box)
 
-        buttons = {}
-        # Xbox 360 buttons
-        btns = [("A", 304), ("B", 305), ("X", 307), ("Y", 308), ("LB", 310), ("RB", 311), ("Back", 314), ("Start", 315), ("Guide", 316), ("TL", 317), ("TR", 318)]
-        for label, code in btns:
-            lbl = Gtk.Label(label=label)
-            lbl.add_css_class("pill")
-            lbl.add_css_class("dim-label")
-            button_flowbox.append(lbl)
-            buttons[code] = lbl
+        # Add visualizer buttons to the main buttons dict for updates
+        buttons = viz_buttons
 
         row.set_activatable_widget(None)
         row.add_suffix(main_box)
@@ -248,17 +371,28 @@ class MainWindow(Adw.ApplicationWindow):
             threading.Thread(target=self._read_evdev_events, args=(path,), daemon=True).start()
 
     def _read_evdev_events(self, path):
+        # Throttle updates for high-frequency axis events
+        last_update = {} # code -> time
         try:
             with evdev.InputDevice(path) as device:
                 for event in device.read_loop():
-                    if path not in self.active_testers:
+                    if path not in self.active_testers or not self.log_monitor_active:
                         break
+
+                    now = GLib.get_monotonic_time() / 1000000.0
                     if event.type == evdev.ecodes.EV_ABS:
-                        GLib.idle_add(self._update_tester_bar, path, event.code, event.value, device.absinfo(event.code))
+                        # Throttle axes to ~60Hz to prevent main loop congestion
+                        if now - last_update.get(event.code, 0) < 0.016:
+                            continue
+                        last_update[event.code] = now
+                        absinfo = device.absinfo(event.code)
+                        GLib.idle_add(self._update_tester_bar, path, event.code, event.value, absinfo)
                     elif event.type == evdev.ecodes.EV_KEY:
                         GLib.idle_add(self._update_tester_button, path, event.code, event.value)
         except Exception as e:
-            logger.error(f"Error reading evdev events from {path}: {e}")
+            # Only log error if it's not a common 'Device vanished' error during shutdown
+            if self.log_monitor_active:
+                logger.debug(f"Info: Stopped monitoring evdev for {path}: {e}")
 
     def _update_tester_button(self, path, code, value):
         if path in self.active_testers:
@@ -286,7 +420,16 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def setup_logs_page(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+        # Toolbar for logs
+        action_bar = Gtk.ActionBar()
+        copy_btn = Gtk.Button(label="Copy All Logs")
+        copy_btn.add_css_class("pill")
+        copy_btn.connect("clicked", self._on_copy_logs_clicked)
+        action_bar.pack_start(copy_btn)
+        box.append(action_bar)
+
         self.log_view = Gtk.TextView(editable=False, monospace=True)
         self.log_view.set_margin_start(12)
         self.log_view.set_margin_end(12)
@@ -300,14 +443,20 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.view_stack.add_titled_with_icon(box, "logs", "Logs", "view-list-bullet-symbolic")
 
-        self.connect("destroy", self._on_destroy)
-
     def _on_destroy(self, *args):
         self.log_monitor_active = False
         if hasattr(self, 'log_proc'):
             self.log_proc.terminate()
+
         if not self.is_observer:
+            if hasattr(self, 'manager_handler_id'):
+                self.manager.disconnect(self.manager_handler_id)
+            if hasattr(self, 'tester_timer_id') and self.tester_timer_id:
+                GLib.source_remove(self.tester_timer_id)
             self.manager.stop_all()
+        else:
+            if hasattr(self, 'observer_timer_id'):
+                GLib.source_remove(self.observer_timer_id)
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -355,18 +504,30 @@ class MainWindow(Adw.ApplicationWindow):
     def show_toast(self, message):
         self.toast_overlay.add_toast(Adw.Toast(title=message))
 
+    def _on_copy_logs_clicked(self, btn):
+        buffer = self.log_view.get_buffer()
+        text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+        clipboard = self.get_display().get_clipboard()
+        clipboard.set(text)
+        self.show_toast("Logs copied to clipboard")
+
     def _on_controllers_changed(self, manager):
         GLib.idle_add(self._refresh_controllers)
 
     def _refresh_controllers(self):
-        while (child := self.controllers_group.get_first_child()):
-            self.controllers_group.remove(child)
+        while (child := self.controllers_list.get_first_child()):
+            if isinstance(child, Gtk.ListBoxRow):
+                row = child.get_child()
+                if hasattr(row, 'cleanup'):
+                    row.cleanup()
+            self.controllers_list.remove(child)
 
         if not self.manager.controllers:
-            self.controllers_group.add(Adw.ActionRow(title="No controllers detected"))
+            row = Adw.ActionRow(title="No controllers detected")
+            self.controllers_list.append(row)
         else:
             for controller in self.manager.controllers.values():
-                self.controllers_group.add(ControllerWidget(controller))
+                self.controllers_list.append(ControllerWidget(controller))
 
     def _update_observer_status(self):
         if not os.path.exists(STATUS_FILE):
@@ -377,12 +538,12 @@ class MainWindow(Adw.ApplicationWindow):
             with open(STATUS_FILE, "r") as f:
                 data = json.load(f)
 
-            while (child := self.controllers_group.get_first_child()):
-                self.controllers_group.remove(child)
+            while (child := self.controllers_list.get_first_child()):
+                self.controllers_list.remove(child)
 
             controllers = data.get("controllers", [])
             if not controllers:
-                self.controllers_group.add(Adw.ActionRow(title="No controllers active in service"))
+                self.controllers_list.append(Adw.ActionRow(title="No controllers active in service"))
             else:
                 for name in controllers:
                     row = Adw.ActionRow(title=name, subtitle="Managed by system service")
@@ -391,7 +552,7 @@ class MainWindow(Adw.ApplicationWindow):
                     badge.add_css_class("success")
                     badge.add_css_class("pill")
                     row.add_suffix(badge)
-                    self.controllers_group.add(row)
+                    self.controllers_list.append(row)
 
             if data.get("steam_blocking"):
                 self.status_page.set_title("Paused (Steam Conflict)")
@@ -412,23 +573,105 @@ class MainWindow(Adw.ApplicationWindow):
                 for line in iter(self.log_proc.stdout.readline, ""):
                     if not self.log_monitor_active:
                         break
-                    GLib.idle_add(self.append_log, line)
-            except: pass
+                    if line:
+                        GLib.idle_add(self.append_log, line)
+                if self.log_proc:
+                    self.log_proc.terminate()
+            except:
+                pass
         threading.Thread(target=monitor, daemon=True).start()
 
     def append_log(self, text):
+        if not text: return False
+        # Deduplicate and summarize logs in the UI with a counter
+        # Strip timestamp for comparison if it's in standard format
+        # e.g. "2026-06-10 16:33:15 - "
+        cmp_text = text
+        if " - " in text:
+            cmp_text = text.split(" - ", 1)[-1]
+
+        if hasattr(self, '_last_log') and self._last_log == cmp_text:
+            self._log_count += 1
+            buffer = self.log_view.get_buffer()
+            # Update the last line to include the count
+            it_start = buffer.get_iter_at_line(buffer.get_line_count() - 1)
+            # Handle PyGObject ResultTuple
+            if not isinstance(it_start, Gtk.TextIter):
+                it_start = it_start[1]
+            it_end = buffer.get_end_iter()
+            buffer.delete(it_start, it_end)
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"{text.strip()} (x{self._log_count})\n", self._last_tag)
+            return False
+
+        self._last_log = cmp_text
+        self._log_count = 1
+
         buffer = self.log_view.get_buffer()
-        buffer.insert(buffer.get_end_iter(), text)
-        if buffer.get_line_count() > 1000:
-            buffer.delete(buffer.get_iter_at_line(0), buffer.get_iter_at_line(50))
+
+        # Colorize and format
+        tag_name = "normal"
+        if "error" in text.lower() or "fail" in text.lower() or "critical" in text.lower():
+            tag_name = "error"
+        elif "warn" in text.lower():
+            tag_name = "warn"
+        elif "info" in text.lower():
+            tag_name = "info"
+        elif "debug" in text.lower():
+            tag_name = "debug"
+
+        self._last_tag = tag_name
+
+        # Apply tags if not already created
+        if not buffer.get_tag_table().lookup("error"):
+            buffer.create_tag("error", foreground="#ff5555", weight=700)
+            buffer.create_tag("warn", foreground="#f1fa8c")
+            buffer.create_tag("info", foreground="#8be9fd")
+            buffer.create_tag("debug", foreground="#6272a4")
+            buffer.create_tag("normal", foreground="#f8f8f2")
+
+        buffer.insert_with_tags_by_name(buffer.get_end_iter(), text, tag_name)
+
+        # Scroll to bottom
+        GLib.idle_add(lambda: self.log_view.scroll_to_mark(buffer.get_insert(), 0.0, True, 0.0, 1.0))
+
+        if buffer.get_line_count() > 500:
+            start_iter = buffer.get_iter_at_line(0)
+            if not isinstance(start_iter, Gtk.TextIter): start_iter = start_iter[1]
+            end_iter = buffer.get_iter_at_line(20)
+            if not isinstance(end_iter, Gtk.TextIter): end_iter = end_iter[1]
+            buffer.delete(start_iter, end_iter)
+
         return False
 
+    def setup_css(self):
+        if not hasattr(self, '_css_loaded'):
+            provider = Gtk.CssProvider()
+            provider.load_from_data(b"""
+                .controller-btn {
+                    border-radius: 50%;
+                    background: alpha(@theme_fg_color, 0.1);
+                    border: 1px solid alpha(@theme_fg_color, 0.2);
+                    font-size: 10px;
+                    font-weight: bold;
+                }
+                .controller-btn.success {
+                    background: @success_bg_color;
+                    color: @success_fg_color;
+                }
+            """)
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+            self._css_loaded = True
+
+
 class Application(Adw.Application):
-    def __init__(self, manager):
-        super().__init__(application_id="io.github.pakrohk.pnp", flags=Gio.ApplicationFlags.FLAGS_NONE)
-        self.manager = manager
-        self.missing_deps = []
+    def __init__(self):
+        # Use NON_UNIQUE flag to completely avoid registration timeouts and DBus locks.
+        # This allows the GUI to always start immediately as a shell.
+        super().__init__(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.indicator = None
+        self.steam_check_enabled = True
 
     def setup_indicator(self):
         try:
@@ -450,20 +693,27 @@ class Application(Adw.Application):
     def on_quit_activate(self, _):
         self.quit()
 
+    def on_toggle_steam_check(self, _):
+        self.steam_check_enabled = not self.steam_check_enabled
+        if self.indicator:
+            self.indicator.update_menu()
+        win = self.get_active_window()
+        if win:
+            win.steam_switch.set_active(self.steam_check_enabled)
+            win.show_toast(f"Steam check {'enabled' if self.steam_check_enabled else 'disabled'}")
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        # Initialize the tray in startup, but safely
+        GLib.idle_add(self.setup_indicator)
+
     def do_activate(self):
         try:
             win = self.get_active_window()
             if not win:
-                win = MainWindow(self.manager, application=self)
-                self.setup_indicator()
+                win = MainWindow(application=self)
 
             win.present()
-
-            if self.missing_deps:
-                msg = f"Missing system dependencies: {', '.join(self.missing_deps)}. Please install them for the application to function correctly."
-                toast = Adw.Toast(title=msg)
-                toast.set_timeout(10)
-                win.toast_overlay.add_toast(toast)
         except Exception as e:
             logger.critical(f"Failed to activate application: {e}", exc_info=True)
             # Show a fallback error dialog if possible

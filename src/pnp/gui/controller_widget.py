@@ -24,8 +24,13 @@ class ControllerWidget(Adw.ActionRow):
 
         self.add_suffix(self.switch)
 
-        self.controller.connect('status-changed', self._on_status_changed)
-        self.controller.connect('battery-changed', self._on_battery_changed)
+        self.handler_ids = {
+            'status-changed': self.controller.connect('status-changed', self._on_status_changed),
+            'battery-changed': self.controller.connect('battery-changed', self._on_battery_changed),
+        }
+
+        self.connect("destroy", self._on_destroy)
+
         self._update_ui(controller.is_active)
         self._on_battery_changed(controller, controller.battery_percentage, controller.battery_status)
 
@@ -79,3 +84,13 @@ class ControllerWidget(Adw.ActionRow):
         else:
             self.status_icon.set_from_icon_name("emblem-important-symbolic")
             self.status_icon.remove_css_class("success")
+
+    def cleanup(self):
+        # Disconnect signals to allow garbage collection
+        for signal_name, handler_id in self.handler_ids.items():
+            if self.controller.handler_is_connected(handler_id):
+                self.controller.disconnect(handler_id)
+        self.handler_ids.clear()
+
+    def _on_destroy(self, widget):
+        self.cleanup()
