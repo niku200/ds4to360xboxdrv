@@ -132,24 +132,38 @@ class StatusNotifierItem:
 
     def handle_menu_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
         if method_name == "GetLayout":
-            # Output: (u(ia{sv}av)) -> (revision, layout)
-            # root, 1: Show, 2: Steam Toggle, 3: separator, 4: Quit
+            # (parentId: i, recursionDepth: i, propertyNames: as) -> (revision: u, layout: (ia{sv}av))
             steam_state = "Enabled" if getattr(self.app, 'steam_check_enabled', True) else "Disabled"
-
-            # Revision should ideally increment, but 1 is often enough to start
             revision = getattr(self, '_menu_revision', 1)
 
+            # Build layout as (ia{sv}av)
+            # The children MUST be GLib.Variant("av", [...])
             layout = (
-                0,
+                0, # root id
                 {"children-display": GLib.Variant("s", "submenu")},
                 [
-                    GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP Interface")}, [])),
-                    GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", f"Steam Pause: {steam_state}")}, [])),
-                    GLib.Variant("(ia{sv}av)", (3, {"type": GLib.Variant("s", "separator")}, [])),
-                    GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Exit Application")}, []))
+                    GLib.Variant("v", GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP Interface")}, []))),
+                    GLib.Variant("v", GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", f"Steam Pause: {steam_state}")}, []))),
+                    GLib.Variant("v", GLib.Variant("(ia{sv}av)", (3, {"type": GLib.Variant("s", "separator")}, []))),
+                    GLib.Variant("v", GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Exit Application")}, [])))
                 ]
             )
             invocation.return_value(GLib.Variant("(u(ia{sv}av))", (revision, layout)))
+        elif method_name == "GetGroupProperties":
+            # (ids: ai, propertyNames: as) -> (properties: a(ia{sv}))
+            ids, props = parameters
+            res = []
+            steam_state = "Enabled" if getattr(self.app, 'steam_check_enabled', True) else "Disabled"
+            for id in ids:
+                if id == 1:
+                    res.append((1, {"label": GLib.Variant("s", "Show PNP Interface")}))
+                elif id == 2:
+                    res.append((2, {"label": GLib.Variant("s", f"Steam Pause: {steam_state}")}))
+                elif id == 3:
+                    res.append((3, {"type": GLib.Variant("s", "separator")}))
+                elif id == 4:
+                    res.append((4, {"label": GLib.Variant("s", "Exit Application")}))
+            invocation.return_value(GLib.Variant("(a(ia{sv}))", [res]))
         elif method_name == "Event":
             id, event_id, data, timestamp = parameters
             if id == 1:
@@ -207,13 +221,14 @@ class StatusNotifierItem:
             except Exception as e:
                 logger.debug(f"SNI registration failed (optional): {e}")
 
-        # Register using the full service name and object path
-        service_name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
+        # Register using the full service name AND the object path
+        # Some watchers expect the full path or just the object path.
+        # Standard SNI says it should be the object path, and it will use the sender's bus name.
         connection.call(
             "org.kde.StatusNotifierWatcher",
             "/StatusNotifierWatcher",
             "org.kde.StatusNotifierWatcher",
             "RegisterStatusNotifierItem",
-            GLib.Variant("(s)", [service_name]),
+            GLib.Variant("(s)", ["/StatusNotifierItem"]),
             None, Gio.DBusCallFlags.NONE, -1, None, on_call_done
         )
