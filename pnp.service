@@ -5,7 +5,7 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 -m pnp.main --headless
+ExecStart=/usr/share/pnp/venv/bin/python3 -m pnp.main --headless
 Environment=PYTHONPATH=/usr/share/pnp
 Environment=WAYLAND_DISPLAY=wayland-0
 Environment=XDG_RUNTIME_DIR=%t
@@ -17,11 +17,12 @@ StandardOutput=journal
 StandardError=journal
 
 # Security Hardening
-DynamicUser=yes
+# DynamicUser=yes can cause issues with /dev/input permissions and link creation
+User=root
+Group=root
 SupplementaryGroups=input
 RuntimeDirectory=pnp
 ConfigurationDirectory=pnp
-ReadWritePaths=/dev/input /dev/uinput
 ProtectSystem=strict
 ProtectHome=true
 NoNewPrivileges=true
