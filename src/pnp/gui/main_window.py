@@ -530,27 +530,20 @@ class MainWindow(Adw.ApplicationWindow):
             GLib.source_remove(self.observer_timer_id)
             self.observer_timer_id = None
 
-        app = self.get_application()
-        if hasattr(self, 'log_proc'):
-            try:
-                self.log_proc.terminate()
-            except:
-                pass
-
         if hasattr(self, 'manager') and self.manager:
             if hasattr(self, 'manager_handler_id'):
                 self.manager.disconnect(self.manager_handler_id)
             if not self.is_observer:
                 self.manager.stop_all()
 
-        if hasattr(self, 'tester_timer_id') and self.tester_timer_id:
-            GLib.source_remove(self.tester_timer_id)
-            self.tester_timer_id = None
+        if hasattr(self, 'log_proc'):
+            try:
+                # Use SIGKILL to ensure log monitor dies immediately
+                self.log_proc.kill()
+            except:
+                pass
 
-        if hasattr(self, 'observer_timer_id') and self.observer_timer_id:
-            GLib.source_remove(self.observer_timer_id)
-            self.observer_timer_id = None
-
+        app = self.get_application()
         if app:
             app.quit()
 
@@ -559,7 +552,7 @@ class MainWindow(Adw.ApplicationWindow):
         # Use os._exit to skip cleanup handlers if we are already in destroy
         # to ensure the process actually dies.
         # Increased delay slightly to allow do_shutdown to finish
-        GLib.timeout_add(200, lambda: os._exit(0))
+        GLib.timeout_add(500, lambda: os._exit(0))
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -671,6 +664,19 @@ class MainWindow(Adw.ApplicationWindow):
         self.service_switch.handler_block_by_func(self._on_service_switch_toggled)
         self.service_switch.set_active(active)
         self.service_switch.handler_unblock_by_func(self._on_service_switch_toggled)
+
+        # Force re-evaluation of manager mode if service was started/stopped externally
+        if active and not self.is_observer:
+             logger.info("Service detected as active. Switching to observer mode.")
+             if self.manager:
+                 self.manager.stop_all()
+                 self.manager = None
+             self.is_observer = True
+        elif not active and self.is_observer:
+             logger.info("Service detected as inactive. Switching to manager mode.")
+             self.is_observer = False
+             GLib.idle_add(self._init_backend)
+             return False # Stop this timer, _init_backend will restart it
 
         if not active:
             self.status_page.set_title("Service Offline")
