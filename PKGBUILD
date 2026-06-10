@@ -27,8 +27,18 @@ package() {
   # Install the wheel
   python -m installer --destdir="$pkgdir" --prefix=/usr dist/*.whl
 
-  # Fix shebangs in /usr/bin scripts to use system python3
-  sed -i '1s|#!.*|#!/usr/bin/python3|' "$pkgdir"/usr/bin/pnp-*
+  # Fix shebangs and set PYTHONPATH in /usr/bin scripts
+  for f in "$pkgdir"/usr/bin/pnp-*; do
+    cat <<EOF > "$f"
+#!/usr/bin/python3
+import sys
+sys.path.insert(0, '/usr/share/pnp')
+from pnp.main import main
+if __name__ == "__main__":
+    sys.exit(main())
+EOF
+    chmod 755 "$f"
+  done
 
   # Install systemd service
   install -Dm644 ../pnp.service "${pkgdir}/usr/lib/systemd/system/pnp.service"

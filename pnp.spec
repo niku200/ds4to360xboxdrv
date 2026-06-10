@@ -33,8 +33,18 @@ rye build --wheel --clean
 %install
 python3 -m installer --destdir=%{buildroot} --prefix=%{_prefix} dist/*.whl
 
-# Fix shebangs
-sed -i '1s|#!.*|#!/usr/bin/python3|' %{buildroot}%{_bindir}/pnp-*
+# Fix shebangs and PYTHONPATH
+for f in %{buildroot}%{_bindir}/pnp-*; do
+  cat <<EOF > "$f"
+#!/usr/bin/python3
+import sys
+sys.path.insert(0, '/usr/share/pnp')
+from pnp.main import main
+if __name__ == "__main__":
+    sys.exit(main())
+EOF
+  chmod 755 "$f"
+done
 
 # Install system files
 install -Dm644 pnp.service %{buildroot}%{_unitdir}/pnp.service

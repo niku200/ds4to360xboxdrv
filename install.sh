@@ -53,14 +53,14 @@ python3 -m venv --system-site-packages "$SHARE_DIR/venv"
 echo "Installing wrapper scripts..."
 cat <<EOF > /usr/bin/pnp-gui
 #!/bin/sh
-export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
+export PYTHONPATH="$SHARE_DIR:\$PYTHONPATH"
 exec "$SHARE_DIR/venv/bin/python3" -m pnp.gui "\$@"
 EOF
 chmod 755 /usr/bin/pnp-gui
 
 cat <<EOF > /usr/bin/pnp-backend
 #!/bin/sh
-export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
+export PYTHONPATH="$SHARE_DIR:\$PYTHONPATH"
 exec "$SHARE_DIR/venv/bin/python3" -m pnp.backend "\$@"
 EOF
 chmod 755 /usr/bin/pnp-backend

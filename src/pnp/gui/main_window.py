@@ -239,6 +239,20 @@ class MainWindow(Adw.ApplicationWindow):
                     if evsieve_link not in self.active_testers:
                         self._add_tester_row(evsieve_link, controller.name)
 
+        # Add virtual Xbox 360 controllers (output of xboxdrv)
+        # These usually appear as /dev/input/js* or /dev/input/event*
+        # but with 'Microsoft' or 'Xbox 360' in their name.
+        import pyudev
+        ctx = pyudev.Context()
+        for device in ctx.list_devices(subsystem='input', ID_INPUT_JOYSTICK='1'):
+            model = device.get('ID_MODEL', '').lower()
+            if 'xbox' in model or 'microsoft' in model:
+                path = device.device_node
+                if path and path not in active_paths:
+                    active_paths.add(path)
+                    if path not in self.active_testers:
+                        self._add_tester_row(path, f"Virtual: {device.get('ID_MODEL', 'Xbox 360 Controller')}")
+
         # Remove stale testers
         for path in list(self.active_testers.keys()):
             if path not in active_paths:
@@ -253,8 +267,16 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def _add_tester_row(self, path, name):
-        row = Adw.ActionRow(title=name, subtitle=f"Virtual device: {path}")
-        row.add_prefix(Gtk.Image.new_from_icon_name("emblem-ok-symbolic"))
+        is_virtual = "Virtual" in name
+        row = Adw.ActionRow(title=name, subtitle=f"Device: {path}")
+
+        icon = "input-gaming-symbolic" if not is_virtual else "controller-symbolic"
+        row.add_prefix(Gtk.Image.new_from_icon_name(icon))
+
+        badge = Gtk.Label(label="Virtual" if is_virtual else "Physical")
+        badge.add_css_class("pill")
+        badge.add_css_class("info" if is_virtual else "success")
+        row.add_suffix(badge)
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=6, margin_bottom=6)
 
@@ -489,18 +511,47 @@ class MainWindow(Adw.ApplicationWindow):
         threading.Thread(target=monitor, daemon=True).start()
 
     def append_log(self, text):
-        # Deduplicate and summarize logs in the UI
-        # We only show unique messages to keep the view clean
+        # Deduplicate and summarize logs in the UI with a counter
         if hasattr(self, '_last_log') and self._last_log == text:
+            self._log_count += 1
+            buffer = self.log_view.get_buffer()
+            # Update the last line to include the count
+            it_start = buffer.get_iter_at_line(buffer.get_line_count() - 1)
+            it_end = buffer.get_end_iter()
+            buffer.delete(it_start, it_end)
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"{text.strip()} (x{self._log_count})\n", self._last_tag)
             return False
+
         self._last_log = text
+        self._log_count = 1
 
         buffer = self.log_view.get_buffer()
-        buffer.insert(buffer.get_end_iter(), text)
+
+        # Colorize and format
+        tag_name = "normal"
+        if "error" in text.lower() or "fail" in text.lower() or "critical" in text.lower():
+            tag_name = "error"
+        elif "warn" in text.lower():
+            tag_name = "warn"
+        elif "info" in text.lower():
+            tag_name = "info"
+        elif "debug" in text.lower():
+            tag_name = "debug"
+
+        self._last_tag = tag_name
+
+        # Apply tags if not already created
+        if not buffer.get_tag_table().lookup("error"):
+            buffer.create_tag("error", foreground="#ff5555", weight=700)
+            buffer.create_tag("warn", foreground="#f1fa8c")
+            buffer.create_tag("info", foreground="#8be9fd")
+            buffer.create_tag("debug", foreground="#6272a4")
+            buffer.create_tag("normal", foreground="#f8f8f2")
+
+        buffer.insert_with_tags_by_name(buffer.get_end_iter(), text, tag_name)
 
         # Scroll to bottom
-        mark = buffer.get_insert()
-        self.log_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
+        GLib.idle_add(lambda: self.log_view.scroll_to_mark(buffer.get_insert(), 0.0, True, 0.0, 1.0))
 
         if buffer.get_line_count() > 500:
             buffer.delete(buffer.get_iter_at_line(0), buffer.get_iter_at_line(20))
