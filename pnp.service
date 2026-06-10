@@ -5,6 +5,7 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
+WorkingDirectory=/usr/share/pnp
 ExecStart=/usr/share/pnp/venv/bin/python3 -m pnp.main --headless
 Environment=PYTHONPATH=/usr/share/pnp
 Environment=WAYLAND_DISPLAY=wayland-0

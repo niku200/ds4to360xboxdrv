@@ -42,12 +42,13 @@ identify_distro_and_install_deps
 echo "Setting up application directory: $SHARE_DIR"
 mkdir -p "$SHARE_DIR"
 cp -r src/pnp "$SHARE_DIR/"
+cp pyproject.toml "$SHARE_DIR/"
 
 # Create a virtual environment to avoid PEP 668 issues on modern distros (Debian 12+, Fedora, etc)
 echo "Setting up Python virtual environment..."
 python3 -m venv --system-site-packages "$SHARE_DIR/venv"
 "$SHARE_DIR/venv/bin/pip" install --upgrade pip
-"$SHARE_DIR/venv/bin/pip" install evdev
+"$SHARE_DIR/venv/bin/pip" install -e "$SHARE_DIR"
 
 # Create robust wrapper scripts
 echo "Installing wrapper scripts..."

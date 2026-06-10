@@ -207,11 +207,13 @@ class StatusNotifierItem:
             except Exception as e:
                 logger.debug(f"SNI registration failed (optional): {e}")
 
+        # Register using the full service name and object path
+        service_name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
         connection.call(
             "org.kde.StatusNotifierWatcher",
             "/StatusNotifierWatcher",
             "org.kde.StatusNotifierWatcher",
             "RegisterStatusNotifierItem",
-            GLib.Variant("(s)", ["/StatusNotifierItem"]),
+            GLib.Variant("(s)", [service_name]),
             None, Gio.DBusCallFlags.NONE, -1, None, on_call_done
         )

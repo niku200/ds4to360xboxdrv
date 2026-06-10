@@ -412,7 +412,7 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             with evdev.InputDevice(path) as device:
                 for event in device.read_loop():
-                    if path not in self.active_testers or not self.log_monitor_active:
+                    if path not in self.active_testers:
                         break
 
                     now = GLib.get_monotonic_time() / 1000000.0
@@ -487,11 +487,10 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_destroy(self, *args):
         logger.debug("MainWindow destroying...")
+        self.log_monitor_active = False
         app = self.get_application()
         if app and hasattr(app, 'indicator') and app.indicator:
             app.indicator.cleanup()
-
-        self.log_monitor_active = False
         if hasattr(self, 'log_proc'):
             try:
                 self.log_proc.terminate()
@@ -511,6 +510,13 @@ class MainWindow(Adw.ApplicationWindow):
         if hasattr(self, 'observer_timer_id') and self.observer_timer_id:
             GLib.source_remove(self.observer_timer_id)
             self.observer_timer_id = None
+
+        if app:
+            app.quit()
+
+        # Hard exit if needed to ensure background threads like log monitor are killed
+        # but let GLib finish its cleanup if possible.
+        GLib.timeout_add(500, lambda: sys.exit(0))
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -747,14 +753,17 @@ class MainWindow(Adw.ApplicationWindow):
             provider.load_from_data(b"""
                 .controller-btn {
                     border-radius: 50%;
-                    background: alpha(@theme_fg_color, 0.1);
-                    border: 1px solid alpha(@theme_fg_color, 0.2);
-                    font-size: 10px;
+                    background: alpha(@theme_fg_color, 0.15);
+                    border: 1px solid alpha(@theme_fg_color, 0.3);
+                    font-size: 12px;
                     font-weight: bold;
+                    min-width: 36px;
+                    min-height: 36px;
                 }
                 .controller-btn.success {
                     background: @success_bg_color;
                     color: @success_fg_color;
+                    border-color: @success_fg_color;
                 }
             """)
             Gtk.StyleContext.add_provider_for_display(
