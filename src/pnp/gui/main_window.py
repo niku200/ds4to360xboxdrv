@@ -83,8 +83,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.view_switcher_bar.set_stack(self.view_stack)
         self.toolbar_view.add_bottom_bar(self.view_switcher_bar)
 
-        # Connect destroy signal early
+        # Connect signals
         self.connect("destroy", self._on_destroy)
+        self.connect("close-request", self._on_close_request)
 
         # Defer manager initialization to background to keep UI responsive
         GLib.idle_add(self._init_backend)
@@ -95,7 +96,11 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _init_backend(self):
         try:
-            if is_service_active():
+            # Update service switch state
+            active = is_service_active()
+            self.service_switch.set_state(active)
+
+            if active:
                 logger.info("Service is active. GUI running in observer mode.")
                 self.is_observer = True
                 self.manager = None
@@ -108,7 +113,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self.manager_handler_id = self.manager.connect('controller-list-changed', self._on_controllers_changed)
                 self._refresh_controllers()
 
-            if self.is_observer:
+            if not hasattr(self, 'observer_timer_id') or not self.observer_timer_id:
                 self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
 
             # Tester update is always useful, but let's run it at a reasonable rate
@@ -139,6 +144,15 @@ class MainWindow(Adw.ApplicationWindow):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         clamp.set_child(box)
         page_box.append(clamp)
+
+        self.service_group = Adw.PreferencesGroup(title="System Service")
+        box.append(self.service_group)
+
+        self.service_switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+        self.service_row = Adw.ActionRow(title="Background Service", subtitle="Manage the system-wide PNP service")
+        self.service_row.add_suffix(self.service_switch)
+        self.service_group.add(self.service_row)
+        self.service_switch.connect("state-set", self._on_service_switch_toggled)
 
         self.controllers_group = Adw.PreferencesGroup(title="Active Controllers")
         box.append(self.controllers_group)
@@ -275,17 +289,41 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _add_tester_row(self, path, name):
         is_virtual = "Virtual" in name
-        row = Adw.ActionRow(title=name, subtitle=f"Device: {path}")
+
+        # We use a vertical box to contain the row header and the visualizer
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        vbox.set_margin_top(12)
+        vbox.set_margin_bottom(12)
+        vbox.set_margin_start(12)
+        vbox.set_margin_end(12)
+        vbox.add_css_class("card")
+
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        vbox.append(header_box)
 
         icon = "input-gaming-symbolic" if not is_virtual else "controller-symbolic"
-        row.add_prefix(Gtk.Image.new_from_icon_name(icon))
+        header_box.append(Gtk.Image.new_from_icon_name(icon))
+
+        title_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        title_lbl = Gtk.Label(label=name, halign=Gtk.Align.START)
+        title_lbl.add_css_class("heading")
+        path_lbl = Gtk.Label(label=path, halign=Gtk.Align.START)
+        path_lbl.add_css_class("caption")
+        path_lbl.add_css_class("dim-label")
+        title_vbox.append(title_lbl)
+        title_vbox.append(path_lbl)
+        header_box.append(title_vbox)
+
+        header_box.append(Gtk.Box(hexpand=True)) # spacer
 
         badge = Gtk.Label(label="Virtual" if is_virtual else "Physical")
         badge.add_css_class("pill")
         badge.add_css_class("info" if is_virtual else "success")
-        row.add_suffix(badge)
+        badge.set_valign(Gtk.Align.CENTER)
+        header_box.append(badge)
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24, margin_top=6, margin_bottom=6)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=32, halign=Gtk.Align.CENTER)
+        vbox.append(main_box)
 
         # Left: Controller Visualizer
         viz_grid = Gtk.Grid(column_spacing=8, row_spacing=8)
@@ -360,11 +398,9 @@ class MainWindow(Adw.ApplicationWindow):
         # Add visualizer buttons to the main buttons dict for updates
         buttons = viz_buttons
 
-        row.set_activatable_widget(None)
-        row.add_suffix(main_box)
-        self.tester_list.append(row)
+        self.tester_list.append(vbox)
 
-        self.active_testers[path] = {'row': row, 'bars': bars, 'buttons': buttons}
+        self.active_testers[path] = {'row': vbox, 'bars': bars, 'buttons': buttons}
 
         # Start a thread to read evdev events for this device
         if evdev:
@@ -376,7 +412,7 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             with evdev.InputDevice(path) as device:
                 for event in device.read_loop():
-                    if path not in self.active_testers or not self.log_monitor_active:
+                    if path not in self.active_testers:
                         break
 
                     now = GLib.get_monotonic_time() / 1000000.0
@@ -443,20 +479,44 @@ class MainWindow(Adw.ApplicationWindow):
 
         self.view_stack.add_titled_with_icon(box, "logs", "Logs", "view-list-bullet-symbolic")
 
-    def _on_destroy(self, *args):
-        self.log_monitor_active = False
-        if hasattr(self, 'log_proc'):
-            self.log_proc.terminate()
+    def _on_close_request(self, *args):
+        # By default, AdwWindow might just hide or not exit if part of an app.
+        # We want it to properly destroy and trigger the cleanup.
+        self.destroy()
+        return False
 
-        if not self.is_observer:
+    def _on_destroy(self, *args):
+        logger.debug("MainWindow destroying...")
+        self.log_monitor_active = False
+        app = self.get_application()
+        if app and hasattr(app, 'indicator') and app.indicator:
+            app.indicator.cleanup()
+        if hasattr(self, 'log_proc'):
+            try:
+                self.log_proc.terminate()
+            except:
+                pass
+
+        if hasattr(self, 'manager') and self.manager:
             if hasattr(self, 'manager_handler_id'):
                 self.manager.disconnect(self.manager_handler_id)
-            if hasattr(self, 'tester_timer_id') and self.tester_timer_id:
-                GLib.source_remove(self.tester_timer_id)
-            self.manager.stop_all()
-        else:
-            if hasattr(self, 'observer_timer_id'):
-                GLib.source_remove(self.observer_timer_id)
+            if not self.is_observer:
+                self.manager.stop_all()
+
+        if hasattr(self, 'tester_timer_id') and self.tester_timer_id:
+            GLib.source_remove(self.tester_timer_id)
+            self.tester_timer_id = None
+
+        if hasattr(self, 'observer_timer_id') and self.observer_timer_id:
+            GLib.source_remove(self.observer_timer_id)
+            self.observer_timer_id = None
+
+        if app:
+            app.quit()
+
+        # Hard exit if needed to ensure background threads like log monitor are killed
+        # but let GLib finish its cleanup if possible.
+        GLib.timeout_add(500, lambda: sys.exit(0))
 
     def load_config(self):
         config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
@@ -529,7 +589,51 @@ class MainWindow(Adw.ApplicationWindow):
             for controller in self.manager.controllers.values():
                 self.controllers_list.append(ControllerWidget(controller))
 
+    def _on_service_switch_toggled(self, switch, state):
+        cmd = ["pkexec", "systemctl", "start" if state else "stop", "pnp.service"]
+
+        def run_cmd():
+            try:
+                subprocess.run(cmd, check=True)
+                GLib.idle_add(self.show_toast, f"Service {'started' if state else 'stopped'}")
+                # Re-check backend mode after a short delay
+                GLib.timeout_add(1000, self._reinit_backend_mode)
+            except Exception as e:
+                logger.error(f"Failed to change service state: {e}")
+                GLib.idle_add(self.show_toast, "Failed to change service state.")
+                GLib.idle_add(lambda: switch.set_state(not state))
+
+        threading.Thread(target=run_cmd, daemon=True).start()
+        return True # Indicate we'll handle the state change
+
+    def _reinit_backend_mode(self):
+        # Stop existing manager if switching to observer
+        if is_service_active() and not self.is_observer:
+            if self.manager:
+                self.manager.stop_all()
+                self.manager = None
+            self.is_observer = True
+            if not hasattr(self, 'observer_timer_id') or not self.observer_timer_id:
+                self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
+        elif not is_service_active() and self.is_observer:
+            if hasattr(self, 'observer_timer_id') and self.observer_timer_id:
+                GLib.source_remove(self.observer_timer_id)
+                self.observer_timer_id = None
+            self._init_backend()
+        return False
+
     def _update_observer_status(self):
+        # Update service switch state
+        active = is_service_active()
+        self.service_switch.set_state(active)
+
+        if not active:
+            self.status_page.set_title("Service Offline")
+            while (child := self.controllers_list.get_first_child()):
+                self.controllers_list.remove(child)
+            self.controllers_list.append(Adw.ActionRow(title="Service is not running"))
+            return True
+
         if not os.path.exists(STATUS_FILE):
             self.status_page.set_title("Service Initializing...")
             return True
@@ -649,14 +753,17 @@ class MainWindow(Adw.ApplicationWindow):
             provider.load_from_data(b"""
                 .controller-btn {
                     border-radius: 50%;
-                    background: alpha(@theme_fg_color, 0.1);
-                    border: 1px solid alpha(@theme_fg_color, 0.2);
-                    font-size: 10px;
+                    background: alpha(@theme_fg_color, 0.15);
+                    border: 1px solid alpha(@theme_fg_color, 0.3);
+                    font-size: 12px;
                     font-weight: bold;
+                    min-width: 36px;
+                    min-height: 36px;
                 }
                 .controller-btn.success {
                     background: @success_bg_color;
                     color: @success_fg_color;
+                    border-color: @success_fg_color;
                 }
             """)
             Gtk.StyleContext.add_provider_for_display(

@@ -123,12 +123,22 @@ class StatusNotifierItem:
     def handle_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
         if method_name == "Activate":
             GLib.idle_add(self.app.on_show_activate, None)
+        elif method_name == "ContextMenu":
+            # For some shells, ContextMenu method call should be handled.
+            # We don't have a separate context menu object, but we can trigger
+            # the DBusMenu refresh if needed.
+            pass
         invocation.return_value(None)
 
     def handle_menu_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
         if method_name == "GetLayout":
+            # Output: (u(ia{sv}av)) -> (revision, layout)
             # root, 1: Show, 2: Steam Toggle, 3: separator, 4: Quit
             steam_state = "Enabled" if getattr(self.app, 'steam_check_enabled', True) else "Disabled"
+
+            # Revision should ideally increment, but 1 is often enough to start
+            revision = getattr(self, '_menu_revision', 1)
+
             layout = (
                 0,
                 {"children-display": GLib.Variant("s", "submenu")},
@@ -139,10 +149,7 @@ class StatusNotifierItem:
                     GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Exit Application")}, []))
                 ]
             )
-            # The interface signature is (ia{sv}av), but GetLayout returns (u(ia{sv}av))
-            # Wait, the XML says (ia{sv}av) is the output.
-            # Let's try wrapping it in another tuple if needed by the caller.
-            invocation.return_value(GLib.Variant("((ia{sv}av))", (layout,)))
+            invocation.return_value(GLib.Variant("(u(ia{sv}av))", (revision, layout)))
         elif method_name == "Event":
             id, event_id, data, timestamp = parameters
             if id == 1:
@@ -168,6 +175,8 @@ class StatusNotifierItem:
         return props.get(property_name)
 
     def update_menu(self):
+        # Increment revision
+        self._menu_revision = getattr(self, '_menu_revision', 1) + 1
         # Notify that layout has changed
         bus = Gio.BusType.SESSION
         Gio.bus_get(bus, None, self._on_bus_ready_for_signal)
@@ -180,10 +189,15 @@ class StatusNotifierItem:
                 "/MenuBar",
                 "com.canonical.dbusmenu",
                 "LayoutUpdated",
-                GLib.Variant("(ui)", (0, 0))
+                GLib.Variant("(ui)", (self._menu_revision, 0))
             )
         except:
             pass
+
+    def cleanup(self):
+        if hasattr(self, 'bus_id'):
+            Gio.bus_unown_name(self.bus_id)
+            del self.bus_id
 
     def register_with_watcher(self, connection):
         def on_call_done(conn, res):
@@ -193,11 +207,13 @@ class StatusNotifierItem:
             except Exception as e:
                 logger.debug(f"SNI registration failed (optional): {e}")
 
+        # Register using the full service name and object path
+        service_name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
         connection.call(
             "org.kde.StatusNotifierWatcher",
             "/StatusNotifierWatcher",
             "org.kde.StatusNotifierWatcher",
             "RegisterStatusNotifierItem",
-            GLib.Variant("(s)", ["/StatusNotifierItem"]),
+            GLib.Variant("(s)", [service_name]),
             None, Gio.DBusCallFlags.NONE, -1, None, on_call_done
         )
