@@ -14,11 +14,10 @@ class ProcessRunner:
 
     def start(self):
         if self.process and self.process.poll() is None:
-            logger.warning(f"Process {self.name} is already running.")
             return
 
         try:
-            logger.info(f"Starting {self.name}: {' '.join(self.command)}")
+            logger.debug(f"Starting {self.name}: {' '.join(self.command)}")
             # Use DEVNULL for pipes to avoid buffer exhaustion hangs.
             # Output is normally not needed as we monitor the service itself.
             self.process = subprocess.Popen(
@@ -36,7 +35,7 @@ class ProcessRunner:
             return
 
         pid = self.process.pid
-        logger.info(f"Stopping {self.name} (PID: {pid})")
+        logger.debug(f"Stopping {self.name} (PID: {pid})")
         try:
             os.killpg(pid, signal.SIGTERM)
             self.process.wait(timeout=5)

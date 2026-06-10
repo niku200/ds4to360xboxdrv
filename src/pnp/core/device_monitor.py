@@ -58,7 +58,13 @@ class DeviceMonitor(GObject.Object):
         path = device.device_node
         name = device.get('ID_MODEL', 'Unknown Sony Controller')
         serial = device.get('ID_SERIAL_SHORT', '0000')
-        logger.info(f"Controller added: {name} at {path}")
+
+        # Deduplicate log
+        msg = f"Controller added: {name} at {path}"
+        if not hasattr(self, '_last_add') or self._last_add != msg:
+            logger.info(msg)
+            self._last_add = msg
+
         self.emit('controller-added', path, name, serial)
 
     def _remove_device(self, device):

@@ -489,10 +489,21 @@ class MainWindow(Adw.ApplicationWindow):
         threading.Thread(target=monitor, daemon=True).start()
 
     def append_log(self, text):
+        # Deduplicate and summarize logs in the UI
+        # We only show unique messages to keep the view clean
+        if hasattr(self, '_last_log') and self._last_log == text:
+            return False
+        self._last_log = text
+
         buffer = self.log_view.get_buffer()
         buffer.insert(buffer.get_end_iter(), text)
-        if buffer.get_line_count() > 1000:
-            buffer.delete(buffer.get_iter_at_line(0), buffer.get_iter_at_line(50))
+
+        # Scroll to bottom
+        mark = buffer.get_insert()
+        self.log_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
+
+        if buffer.get_line_count() > 500:
+            buffer.delete(buffer.get_iter_at_line(0), buffer.get_iter_at_line(20))
         return False
 
 class Application(Adw.Application):
