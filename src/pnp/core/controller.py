@@ -106,7 +106,8 @@ class Controller(GObject.Object):
         self.evsieve_proc.start()
 
         # Wait for the virtual device link to be created asynchronously
-        self._retry_count = 25
+        # Increase timeout to 10 seconds (50 retries * 200ms) for slow systems
+        self._retry_count = 50
         GLib.timeout_add(200, self._check_evsieve_link, evsieve_link)
 
     def _check_evsieve_link(self, evsieve_link):

@@ -50,8 +50,8 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_default_size(900, 700)
 
         # Style Manager for dark theme
-        style_manager = Adw.StyleManager.get_default()
-        style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
+        self.style_manager = Adw.StyleManager.get_default()
+        self.style_manager.set_color_scheme(Adw.ColorScheme.PREFER_DARK)
 
         # Main Layout
         self.toolbar_view = Adw.ToolbarView()
@@ -90,6 +90,7 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.idle_add(self._init_backend)
 
         self.load_config()
+        self.setup_css()
         self.start_log_monitor()
 
     def _init_backend(self):
@@ -581,6 +582,7 @@ class MainWindow(Adw.ApplicationWindow):
         threading.Thread(target=monitor, daemon=True).start()
 
     def append_log(self, text):
+        if not text: return False
         # Deduplicate and summarize logs in the UI with a counter
         # Strip timestamp for comparison if it's in standard format
         # e.g. "2026-06-10 16:33:15 - "
@@ -593,6 +595,9 @@ class MainWindow(Adw.ApplicationWindow):
             buffer = self.log_view.get_buffer()
             # Update the last line to include the count
             it_start = buffer.get_iter_at_line(buffer.get_line_count() - 1)
+            # Handle PyGObject ResultTuple
+            if not isinstance(it_start, Gtk.TextIter):
+                it_start = it_start[1]
             it_end = buffer.get_end_iter()
             buffer.delete(it_start, it_end)
             buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"{text.strip()} (x{self._log_count})\n", self._last_tag)
@@ -629,7 +634,16 @@ class MainWindow(Adw.ApplicationWindow):
         # Scroll to bottom
         GLib.idle_add(lambda: self.log_view.scroll_to_mark(buffer.get_insert(), 0.0, True, 0.0, 1.0))
 
-        # Add CSS for visualizer
+        if buffer.get_line_count() > 500:
+            start_iter = buffer.get_iter_at_line(0)
+            if not isinstance(start_iter, Gtk.TextIter): start_iter = start_iter[1]
+            end_iter = buffer.get_iter_at_line(20)
+            if not isinstance(end_iter, Gtk.TextIter): end_iter = end_iter[1]
+            buffer.delete(start_iter, end_iter)
+
+        return False
+
+    def setup_css(self):
         if not hasattr(self, '_css_loaded'):
             provider = Gtk.CssProvider()
             provider.load_from_data(b"""
@@ -650,9 +664,6 @@ class MainWindow(Adw.ApplicationWindow):
             )
             self._css_loaded = True
 
-        if buffer.get_line_count() > 500:
-            buffer.delete(buffer.get_iter_at_line(0), buffer.get_iter_at_line(20))
-        return False
 
 class Application(Adw.Application):
     def __init__(self):

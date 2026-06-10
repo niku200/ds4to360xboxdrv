@@ -139,7 +139,7 @@ class StatusNotifierItem:
                     GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Exit Application")}, []))
                 ]
             )
-            invocation.return_value(GLib.Variant("(ia{sv}av)", layout))
+            invocation.return_value(GLib.Variant("((ia{sv}av))", (layout,)))
         elif method_name == "Event":
             id, event_id, data, timestamp = parameters
             if id == 1:
