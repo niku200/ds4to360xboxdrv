@@ -86,14 +86,18 @@ class Controller(GObject.Object):
         self.is_active = True
         self.emit('status-changed', True)
 
-        evsieve_link = f"/dev/input/evsieve_{os.path.basename(self.device_path)}"
+        # Use a unique name for the evsieve link to avoid collisions if multiple controllers
+        # have similar base device names (unlikely but possible).
+        # Also include serial if available.
+        link_id = f"{self.serial}_{os.path.basename(self.device_path)}"
+        evsieve_link = f"/dev/input/evsieve_{link_id}"
 
         # Ensure the link doesn't exist before starting evsieve
-        if os.path.exists(evsieve_link):
+        if os.path.lexists(evsieve_link):
             try:
                 os.remove(evsieve_link)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to remove stale link {evsieve_link}: {e}")
 
         self.evsieve_proc = ProcessRunner(
             f"evsieve-{self.serial}",
@@ -164,8 +168,9 @@ class Controller(GObject.Object):
             self.evsieve_proc = None
 
         # Clean up link if exists
-        evsieve_link = f"/dev/input/evsieve_{os.path.basename(self.device_path)}"
-        if os.path.exists(evsieve_link):
+        link_id = f"{self.serial}_{os.path.basename(self.device_path)}"
+        evsieve_link = f"/dev/input/evsieve_{link_id}"
+        if os.path.lexists(evsieve_link):
             try:
                 os.remove(evsieve_link)
             except Exception as e:

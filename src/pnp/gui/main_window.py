@@ -183,7 +183,8 @@ class MainWindow(Adw.ApplicationWindow):
         active_paths = set()
         for controller in self.manager.controllers.values():
             if controller.is_active:
-                evsieve_link = f"/dev/input/evsieve_{os.path.basename(controller.device_path)}"
+                link_id = f"{controller.serial}_{os.path.basename(controller.device_path)}"
+                evsieve_link = f"/dev/input/evsieve_{link_id}"
                 if os.path.exists(evsieve_link):
                     active_paths.add(evsieve_link)
                     if evsieve_link not in self.active_testers:

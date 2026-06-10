@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # --- Thanks & Introduction ---
 echo "----------------------------------------------------"
@@ -18,11 +18,11 @@ CONFIG_PATH="/etc/pnp/pnp.conf"
 identify_distro_and_install_deps() {
     echo "Checking for system dependencies..."
 
-    if command -v pacman &> /dev/null; then
+    if command -v pacman > /dev/null 2>&1; then
         sudo pacman -S --noconfirm --needed xboxdrv evsieve python-gobject gtk4 libadwaita python-evdev
-    elif command -v dnf &> /dev/null; then
+    elif command -v dnf > /dev/null 2>&1; then
         sudo dnf install -y xboxdrv evsieve python3-gobject gtk4 libadwaita python3-evdev python3-virtualenv
-    elif command -v apt &> /dev/null; then
+    elif command -v apt > /dev/null 2>&1; then
         sudo apt update
         sudo apt install -y xboxdrv evsieve python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-evdev python3-venv
     else
@@ -52,18 +52,18 @@ python3 -m venv --system-site-packages "$SHARE_DIR/venv"
 # Create robust wrapper scripts
 echo "Installing wrapper scripts..."
 cat <<EOF > /usr/bin/pnp-gui
-#!/bin/bash
+#!/bin/sh
 export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
 exec "$SHARE_DIR/venv/bin/python3" -m pnp.gui "\$@"
 EOF
-chmod +x /usr/bin/pnp-gui
+chmod 755 /usr/bin/pnp-gui
 
 cat <<EOF > /usr/bin/pnp-backend
-#!/bin/bash
+#!/bin/sh
 export PYTHONPATH="\$PYTHONPATH:$SHARE_DIR"
 exec "$SHARE_DIR/venv/bin/python3" -m pnp.backend "\$@"
 EOF
-chmod +x /usr/bin/pnp-backend
+chmod 755 /usr/bin/pnp-backend
 
 # Install system components
 echo "Installing system components..."

@@ -40,15 +40,17 @@ class ProcessRunner:
         try:
             os.killpg(pid, signal.SIGTERM)
             self.process.wait(timeout=5)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             pass
         except subprocess.TimeoutExpired:
             logger.warning(f"{self.name} did not stop gracefully, killing...")
             try:
                 os.killpg(pid, signal.SIGKILL)
                 self.process.wait(timeout=2)
-            except:
+            except (ProcessLookupError, PermissionError):
                 pass
+            except Exception as e:
+                logger.error(f"Error killing {self.name}: {e}")
         except Exception as e:
             logger.error(f"Error stopping {self.name}: {e}")
         finally:

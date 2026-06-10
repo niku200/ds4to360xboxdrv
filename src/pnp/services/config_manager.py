@@ -1,22 +1,26 @@
 import os
 import configparser
 import logging
+from gi.repository import GLib
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = "/etc/pnp/pnp.conf"
 LEGACY_CONFIG_PATH = "/etc/ds4to360.conf"
-USER_CONFIG_DIR = os.path.expanduser("~/.config/pnp/controllers/")
+USER_CONFIG_DIR = os.path.join(GLib.get_user_config_dir(), "pnp", "controllers")
 
 class ConfigManager:
     def __init__(self, config_path=DEFAULT_CONFIG_PATH):
         self.config_path = config_path
         self.config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
         self.load_defaults()
-        if os.path.exists(self.config_path):
-            self.config.read(self.config_path)
-        elif os.path.exists(LEGACY_CONFIG_PATH):
-            self.config.read(LEGACY_CONFIG_PATH)
+        try:
+            if os.path.exists(self.config_path):
+                self.config.read(self.config_path)
+            elif os.path.exists(LEGACY_CONFIG_PATH):
+                self.config.read(LEGACY_CONFIG_PATH)
+        except Exception as e:
+            logger.error(f"Failed to read config file: {e}")
 
     def load_defaults(self):
         if 'settings' not in self.config:

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 echo "----------------------------------------------------"
 echo "--- PNP – PS NOT PS Controller Uninstaller ---"
@@ -12,8 +12,8 @@ fi
 SERVICE_NAME="pnp.service"
 
 echo "Stopping and disabling service..."
-systemctl stop "$SERVICE_NAME" 2>/dev/null
-systemctl disable "$SERVICE_NAME" 2>/dev/null
+systemctl stop "$SERVICE_NAME" >/dev/null 2>&1
+systemctl disable "$SERVICE_NAME" >/dev/null 2>&1
 
 echo "Removing files..."
 rm -f /usr/lib/systemd/system/$SERVICE_NAME
