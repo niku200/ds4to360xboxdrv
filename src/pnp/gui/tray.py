@@ -127,20 +127,27 @@ class StatusNotifierItem:
 
     def handle_menu_method_call(self, connection, sender, object_path, interface_name, method_name, parameters, invocation):
         if method_name == "GetLayout":
-            # Simple menu: 0: root, 1: Show, 2: Quit
+            # root, 1: Show, 2: Steam Toggle, 3: separator, 4: Quit
+            steam_state = "Enabled" if getattr(self.app, 'steam_check_enabled', True) else "Disabled"
             layout = (
                 0,
                 {"children-display": GLib.Variant("s", "submenu")},
                 [
-                    GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP")}, [])),
-                    GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", "Quit")}, []))
+                    GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Show PNP Interface")}, [])),
+                    GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", f"Steam Pause: {steam_state}")}, [])),
+                    GLib.Variant("(ia{sv}av)", (3, {"type": GLib.Variant("s", "separator")}, [])),
+                    GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Exit Application")}, []))
                 ]
             )
             invocation.return_value(GLib.Variant("(ia{sv}av)", layout))
         elif method_name == "Event":
             id, event_id, data, timestamp = parameters
-            if id == 1: GLib.idle_add(self.app.on_show_activate, None)
-            elif id == 2: GLib.idle_add(self.app.on_quit_activate, None)
+            if id == 1:
+                GLib.idle_add(self.app.on_show_activate, None)
+            elif id == 2:
+                GLib.idle_add(self.app.on_toggle_steam_check, None)
+            elif id == 4:
+                GLib.idle_add(self.app.on_quit_activate, None)
             invocation.return_value(None)
         else:
             invocation.return_value(None)

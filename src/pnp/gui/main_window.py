@@ -109,8 +109,11 @@ class MainWindow(Adw.ApplicationWindow):
 
             if self.is_observer:
                 self.observer_timer_id = GLib.timeout_add(1000, self._update_observer_status)
-            else:
-                self.tester_timer_id = GLib.timeout_add(100, self._update_tester_list)
+
+            # Tester update is always useful, but let's run it at a reasonable rate
+            self.tester_timer_id = GLib.timeout_add(2000, self._update_tester_list)
+            # Run once immediately
+            self._update_tester_list()
 
             # Check dependencies
             missing = check_dependencies()
@@ -230,8 +233,11 @@ class MainWindow(Adw.ApplicationWindow):
     def _update_tester_list(self):
         # Synchronize tester rows with active controllers
         active_paths = set()
-        for controller in self.manager.controllers.values():
-            if controller.is_active:
+
+        # Only iterate manager controllers if we have a manager (manager mode)
+        if self.manager:
+            for controller in self.manager.controllers.values():
+                if controller.is_active:
                 link_id = f"{controller.serial}_{os.path.basename(controller.device_path)}"
                 evsieve_link = f"/dev/input/evsieve_{link_id}"
                 if os.path.exists(evsieve_link):
@@ -278,36 +284,80 @@ class MainWindow(Adw.ApplicationWindow):
         badge.add_css_class("info" if is_virtual else "success")
         row.add_suffix(badge)
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=6, margin_bottom=6)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24, margin_top=6, margin_bottom=6)
 
-        # Grid for axes
-        grid = Gtk.Grid(column_spacing=12, row_spacing=6)
-        main_box.append(grid)
+        # Left: Controller Visualizer
+        viz_grid = Gtk.Grid(column_spacing=8, row_spacing=8)
+        viz_grid.set_halign(Gtk.Align.CENTER)
+        viz_grid.set_valign(Gtk.Align.CENTER)
+
+        viz_buttons = {}
+        def add_viz(label, code, row, col):
+            lbl = Gtk.Label(label=label)
+            lbl.add_css_class("controller-btn")
+            lbl.add_css_class("dim-label")
+            lbl.set_size_request(32, 32)
+            viz_grid.attach(lbl, col, row, 1, 1)
+            viz_buttons[code] = lbl
+
+        # Advanced Controller Visualizer Grid (5x7)
+        # Col 0: Left Shoulder/Trigger
+        # Col 1-2: D-Pad & Left Stick
+        # Col 3: Function buttons (Center)
+        # Col 4-5: Action buttons & Right Stick
+        # Col 6: Right Shoulder/Trigger
+
+        # Action Buttons (Diamond)
+        add_viz("Y", 308, 1, 5)
+        add_viz("X", 307, 2, 4)
+        add_viz("B", 305, 2, 6)
+        add_viz("A", 304, 3, 5)
+
+        # D-Pad
+        add_viz("DU", 16, 1, 1)
+        add_viz("DL", 18, 2, 0)
+        add_viz("DR", 19, 2, 2)
+        add_viz("DD", 17, 3, 1)
+
+        # Function Buttons
+        add_viz("Bk", 314, 2, 3)
+        add_viz("G", 316, 1, 3)
+        add_viz("St", 315, 3, 3)
+
+        # Shoulders
+        add_viz("LB", 310, 0, 1)
+        add_viz("RB", 311, 0, 5)
+
+        # Thumbstick Clicks
+        add_viz("L3", 317, 4, 1)
+        add_viz("R3", 318, 4, 5)
+
+        # D-pad (usually 16 or Hat) - for now just buttons if available
+        # In xboxdrv mapping, dpad usually mapped to keys or hat
+        # We can add them if they come through as keys
+
+        main_box.append(viz_grid)
+
+        # Right: Bars
+        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
+        grid = Gtk.Grid(column_spacing=12, row_spacing=4)
+        right_box.append(grid)
 
         bars = {}
         axes = [("LX", 0), ("LY", 1), ("RX", 2), ("RY", 3), ("LT", 4), ("RT", 5)]
         for i, (label, code) in enumerate(axes):
             lbl = Gtk.Label(label=label)
-            lbl.set_halign(Gtk.Align.START)
+            lbl.add_css_class("caption")
             progress = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
             progress.set_fraction(0.5 if i < 4 else 0.0)
             grid.attach(lbl, 0, i, 1, 1)
             grid.attach(progress, 1, i, 1, 1)
             bars[code] = progress
 
-        # Buttons flowbox
-        button_flowbox = Gtk.FlowBox(valign=Gtk.Align.CENTER, max_children_per_line=11, selection_mode=Gtk.SelectionMode.NONE)
-        main_box.append(button_flowbox)
+        main_box.append(right_box)
 
-        buttons = {}
-        # Xbox 360 buttons
-        btns = [("A", 304), ("B", 305), ("X", 307), ("Y", 308), ("LB", 310), ("RB", 311), ("Back", 314), ("Start", 315), ("Guide", 316), ("TL", 317), ("TR", 318)]
-        for label, code in btns:
-            lbl = Gtk.Label(label=label)
-            lbl.add_css_class("pill")
-            lbl.add_css_class("dim-label")
-            button_flowbox.append(lbl)
-            buttons[code] = lbl
+        # Add visualizer buttons to the main buttons dict for updates
+        buttons = viz_buttons
 
         row.set_activatable_widget(None)
         row.add_suffix(main_box)
@@ -320,16 +370,20 @@ class MainWindow(Adw.ApplicationWindow):
             threading.Thread(target=self._read_evdev_events, args=(path,), daemon=True).start()
 
     def _read_evdev_events(self, path):
+        # Throttle updates for high-frequency axis events
+        last_update = {} # code -> time
         try:
             with evdev.InputDevice(path) as device:
                 for event in device.read_loop():
-                    # Stop monitoring if the tester for this path is gone or app is closing
                     if path not in self.active_testers or not self.log_monitor_active:
                         break
 
+                    now = GLib.get_monotonic_time() / 1000000.0
                     if event.type == evdev.ecodes.EV_ABS:
-                        # Throttle UI updates for high-frequency axis events if needed.
-                        # For now, we ensure we only call idle_add if the app is still healthy.
+                        # Throttle axes to ~60Hz to prevent main loop congestion
+                        if now - last_update.get(event.code, 0) < 0.016:
+                            continue
+                        last_update[event.code] = now
                         absinfo = device.absinfo(event.code)
                         GLib.idle_add(self._update_tester_bar, path, event.code, event.value, absinfo)
                     elif event.type == evdev.ecodes.EV_KEY:
@@ -365,7 +419,16 @@ class MainWindow(Adw.ApplicationWindow):
         return False
 
     def setup_logs_page(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+        # Toolbar for logs
+        action_bar = Gtk.ActionBar()
+        copy_btn = Gtk.Button(label="Copy All Logs")
+        copy_btn.add_css_class("pill")
+        copy_btn.connect("clicked", self._on_copy_logs_clicked)
+        action_bar.pack_start(copy_btn)
+        box.append(action_bar)
+
         self.log_view = Gtk.TextView(editable=False, monospace=True)
         self.log_view.set_margin_start(12)
         self.log_view.set_margin_end(12)
@@ -440,6 +503,13 @@ class MainWindow(Adw.ApplicationWindow):
     def show_toast(self, message):
         self.toast_overlay.add_toast(Adw.Toast(title=message))
 
+    def _on_copy_logs_clicked(self, btn):
+        buffer = self.log_view.get_buffer()
+        text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+        clipboard = self.get_display().get_clipboard()
+        clipboard.set(text)
+        self.show_toast("Logs copied to clipboard")
+
     def _on_controllers_changed(self, manager):
         GLib.idle_add(self._refresh_controllers)
 
@@ -512,7 +582,13 @@ class MainWindow(Adw.ApplicationWindow):
 
     def append_log(self, text):
         # Deduplicate and summarize logs in the UI with a counter
-        if hasattr(self, '_last_log') and self._last_log == text:
+        # Strip timestamp for comparison if it's in standard format
+        # e.g. "2026-06-10 16:33:15 - "
+        cmp_text = text
+        if " - " in text:
+            cmp_text = text.split(" - ", 1)[-1]
+
+        if hasattr(self, '_last_log') and self._last_log == cmp_text:
             self._log_count += 1
             buffer = self.log_view.get_buffer()
             # Update the last line to include the count
@@ -522,7 +598,7 @@ class MainWindow(Adw.ApplicationWindow):
             buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"{text.strip()} (x{self._log_count})\n", self._last_tag)
             return False
 
-        self._last_log = text
+        self._last_log = cmp_text
         self._log_count = 1
 
         buffer = self.log_view.get_buffer()
@@ -553,6 +629,27 @@ class MainWindow(Adw.ApplicationWindow):
         # Scroll to bottom
         GLib.idle_add(lambda: self.log_view.scroll_to_mark(buffer.get_insert(), 0.0, True, 0.0, 1.0))
 
+        # Add CSS for visualizer
+        if not hasattr(self, '_css_loaded'):
+            provider = Gtk.CssProvider()
+            provider.load_from_data(b"""
+                .controller-btn {
+                    border-radius: 50%;
+                    background: alpha(@theme_fg_color, 0.1);
+                    border: 1px solid alpha(@theme_fg_color, 0.2);
+                    font-size: 10px;
+                    font-weight: bold;
+                }
+                .controller-btn.success {
+                    background: @success_bg_color;
+                    color: @success_fg_color;
+                }
+            """)
+            Gtk.StyleContext.add_provider_for_display(
+                Gio.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+            self._css_loaded = True
+
         if buffer.get_line_count() > 500:
             buffer.delete(buffer.get_iter_at_line(0), buffer.get_iter_at_line(20))
         return False
@@ -563,6 +660,7 @@ class Application(Adw.Application):
         # This allows the GUI to always start immediately as a shell.
         super().__init__(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.indicator = None
+        self.steam_check_enabled = True
 
     def setup_indicator(self):
         try:
@@ -583,6 +681,13 @@ class Application(Adw.Application):
 
     def on_quit_activate(self, _):
         self.quit()
+
+    def on_toggle_steam_check(self, _):
+        self.steam_check_enabled = not self.steam_check_enabled
+        win = self.get_active_window()
+        if win:
+            win.steam_switch.set_active(self.steam_check_enabled)
+            win.show_toast(f"Steam check {'enabled' if self.steam_check_enabled else 'disabled'}")
 
     def do_startup(self):
         Adw.Application.do_startup(self)

@@ -5,7 +5,8 @@ Requires=bluetooth.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/pnp-backend
+ExecStart=/usr/bin/python3 -m pnp.main --headless
+Environment=PYTHONPATH=/usr/share/pnp
 Environment=WAYLAND_DISPLAY=wayland-0
 Environment=XDG_RUNTIME_DIR=%t
 Restart=on-failure

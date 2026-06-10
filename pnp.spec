@@ -34,21 +34,22 @@ rye build --wheel --clean
 python3 -m installer --destdir=%{buildroot} --prefix=%{_prefix} dist/*.whl
 
 # Fix shebangs and PYTHONPATH
-for f in %{buildroot}%{_bindir}/pnp-*; do
-  cat <<EOF > "$f"
-#!/usr/bin/python3
-import sys
-sys.path.insert(0, '/usr/share/pnp')
-from pnp.main import main
-if __name__ == "__main__":
-    sys.exit(main())
+cat <<EOF > %{buildroot}%{_bindir}/pnp-gui
+#!/bin/sh
+export PYTHONPATH="/usr/share/pnp:\$PYTHONPATH"
+exec /usr/bin/python3 -m pnp.main "\$@"
 EOF
-  chmod 755 "$f"
-done
+chmod 755 %{buildroot}%{_bindir}/pnp-gui
+
+cat <<EOF > %{buildroot}%{_bindir}/pnp-backend
+#!/bin/sh
+export PYTHONPATH="/usr/share/pnp:\$PYTHONPATH"
+exec /usr/bin/python3 -m pnp.main --headless "\$@"
+EOF
+chmod 755 %{buildroot}%{_bindir}/pnp-backend
 
 # Install system files
 install -Dm644 pnp.service %{buildroot}%{_unitdir}/pnp.service
-sed -i "s|ExecStart=.*|ExecStart=%{_bindir}/pnp-backend|" %{buildroot}%{_unitdir}/pnp.service
 
 install -Dm644 99-pnp.rules %{buildroot}%{_udevrulesdir}/99-pnp.rules
 install -Dm644 pnp.desktop %{buildroot}%{_datadir}/applications/pnp.desktop

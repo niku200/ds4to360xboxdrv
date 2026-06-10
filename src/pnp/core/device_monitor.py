@@ -39,13 +39,15 @@ class DeviceMonitor(GObject.Object):
         is_sony = vendor in self.SONY_VENDORS and device.get('ID_INPUT_JOYSTICK') == '1'
 
         # Avoid recursive detection: ignore virtual/emulated devices
-        # Virtual devices typically have ID_BUS set to something other than usb/bluetooth (e.g. None or 'virtual')
-        # We also check for 'evsieve' in the device name to be safe
-        is_virtual = device.get('ID_BUS') not in ['usb', 'bluetooth']
-        model_name = device.get('ID_MODEL', '').lower()
-        is_emulated = 'evsieve' in model_name or 'xbox' in model_name
+        # Physical devices MUST have ID_BUS set to usb or bluetooth
+        bus = device.get('ID_BUS')
+        is_physical = bus in ['usb', 'bluetooth']
 
-        return is_sony and not is_virtual and not is_emulated and device.device_node and "event" in device.device_node
+        model_name = device.get('ID_MODEL', '').lower()
+        # Explicitly exclude common emulated strings
+        is_emulated = 'evsieve' in model_name or 'xbox' in model_name or 'microsoft' in model_name
+
+        return is_sony and is_physical and not is_emulated and device.device_node and "event" in device.device_node
 
     def _on_device_event(self, observer, device):
         action = device.action

@@ -28,21 +28,22 @@ package() {
   python -m installer --destdir="$pkgdir" --prefix=/usr dist/*.whl
 
   # Fix shebangs and set PYTHONPATH in /usr/bin scripts
-  for f in "$pkgdir"/usr/bin/pnp-*; do
-    cat <<EOF > "$f"
-#!/usr/bin/python3
-import sys
-sys.path.insert(0, '/usr/share/pnp')
-from pnp.main import main
-if __name__ == "__main__":
-    sys.exit(main())
+  cat <<EOF > "$pkgdir/usr/bin/pnp-gui"
+#!/bin/sh
+export PYTHONPATH="/usr/share/pnp:\$PYTHONPATH"
+exec /usr/bin/python3 -m pnp.main "\$@"
 EOF
-    chmod 755 "$f"
-  done
+  chmod 755 "$pkgdir/usr/bin/pnp-gui"
+
+  cat <<EOF > "$pkgdir/usr/bin/pnp-backend"
+#!/bin/sh
+export PYTHONPATH="/usr/share/pnp:\$PYTHONPATH"
+exec /usr/bin/python3 -m pnp.main --headless "\$@"
+EOF
+  chmod 755 "$pkgdir/usr/bin/pnp-backend"
 
   # Install systemd service
   install -Dm644 ../pnp.service "${pkgdir}/usr/lib/systemd/system/pnp.service"
-  sed -i "s|ExecStart=.*|ExecStart=/usr/bin/pnp-backend|" "${pkgdir}/usr/lib/systemd/system/pnp.service"
 
   # Install udev rules
   install -Dm644 ../99-pnp.rules "${pkgdir}/usr/lib/udev/rules.d/99-pnp.rules"
