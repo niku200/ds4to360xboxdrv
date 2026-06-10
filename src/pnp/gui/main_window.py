@@ -13,13 +13,25 @@ try:
 except ImportError:
     evdev = None
 
-def is_service_active():
+def get_service_status():
     import subprocess
     try:
+        # Check active state
         res = subprocess.run(["systemctl", "is-active", "pnp.service"], capture_output=True, text=True)
-        return res.stdout.strip() == "active"
-    except:
-        return False
+        active_state = res.stdout.strip()
+
+        # Check if enabled
+        res_enabled = subprocess.run(["systemctl", "is-enabled", "pnp.service"], capture_output=True, text=True)
+        enabled_state = res_enabled.stdout.strip()
+
+        return active_state, enabled_state
+    except Exception as e:
+        logger.debug(f"Error getting service status: {e}")
+        return "unknown", "unknown"
+
+def is_service_active():
+    active, _ = get_service_status()
+    return active == "active"
 
 def check_dependencies():
     import shutil
@@ -660,7 +672,9 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _update_observer_status(self):
         # Update service switch state without triggering the signal
-        active = is_service_active()
+        active_state, enabled_state = get_service_status()
+        active = active_state == "active"
+
         self.service_switch.handler_block_by_func(self._on_service_switch_toggled)
         self.service_switch.set_active(active)
         self.service_switch.handler_unblock_by_func(self._on_service_switch_toggled)
@@ -679,7 +693,7 @@ class MainWindow(Adw.ApplicationWindow):
              return False # Stop this timer, _init_backend will restart it
 
         if not active:
-            self.status_page.set_title("Service Offline")
+            self.status_page.set_title(f"Service {active_state.title()}")
             while (child := self.controllers_list.get_first_child()):
                 self.controllers_list.remove(child)
             self.controllers_list.append(Adw.ActionRow(title="Service is not running"))
@@ -827,7 +841,7 @@ class Application(Adw.Application):
     def __init__(self):
         # Use NON_UNIQUE flag to completely avoid registration timeouts and DBus locks.
         # This allows the GUI to always start immediately as a shell.
-        super().__init__(application_id=None, flags=Gio.ApplicationFlags.NON_UNIQUE)
+        super().__init__(application_id="ir.pakrohk.pnp", flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.indicator = None
         self.steam_check_enabled = True
 
