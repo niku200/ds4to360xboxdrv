@@ -41,5 +41,12 @@ echo "PNP will automatically pause once Steam Input engages."
 export SteamAppId=$PROXY_APPID
 export SteamGameId=$PROXY_APPID
 
+# NEW: AppID Detection for Profile Downloader
+if [ -f "steam_appid.txt" ]; then
+    REAL_APPID=$(cat steam_appid.txt)
+    echo "Detected Real AppID: $REAL_APPID. PNP will try to apply matching profile."
+    # We could send a signal to the PNP backend here if needed
+fi
+
 # Run the game
 exec "$@"

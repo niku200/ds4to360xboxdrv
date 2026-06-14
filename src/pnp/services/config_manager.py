@@ -27,6 +27,7 @@ class ConfigManager:
             self.config['settings'] = {}
         self.config['settings']['rumble_gain'] = '15%'
         self.config['settings']['steam_conflict_check'] = 'true'
+        self.config['settings']['polling_interval_ms'] = '2000'
 
         if 'mapping' not in self.config:
             self.config['mapping'] = {}
