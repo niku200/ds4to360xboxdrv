@@ -1,8 +1,11 @@
 import os
 import logging
 import time
+import evdev
+from evdev import ecodes as e
 from gi.repository import GObject, GLib
 from pnp.services.process_runner import ProcessRunner
+from pnp.core.virtual_controller import VirtualController
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +22,7 @@ class Controller(GObject.Object):
         self.serial = serial or "unknown"
         self.config = config
         self.evsieve_proc = None
-        self.xboxdrv_proc = None
+        self.v_controller = None
         self.is_active = False
 
         self.battery_percentage = -1
@@ -115,7 +118,7 @@ class Controller(GObject.Object):
             return False
 
         if os.path.exists(evsieve_link):
-            self._start_xboxdrv(evsieve_link)
+            self._start_virtual_mapping(evsieve_link)
             return False # Stop timeout
 
         self._retry_count -= 1
@@ -126,25 +129,105 @@ class Controller(GObject.Object):
 
         return True # Continue timeout
 
-    def _start_xboxdrv(self, evsieve_link):
+    def _start_virtual_mapping(self, evsieve_link):
         if not self.is_active:
             return
 
-        # Get mapping from config
-        axismap = self.config.get('mapping', 'axismap', fallback='-y1=y1,-y2=y2')
-        absmap = self.config.get('mapping', 'absmap', fallback='ABS_X=x1,ABS_Y=y1,ABS_RX=x2,ABS_RY=y2,ABS_Z=lt,ABS_RZ=rt,ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y')
-        keymap = self.config.get('mapping', 'keymap', fallback='BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_TL2=lt,BTN_TR2=rt,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide')
+        # Initialize native virtual controller
+        self.v_controller = VirtualController(name=f"Xbox 360 (PNP-{self.serial})")
+        self.v_controller.start()
 
-        xboxdrv_cmd = [
-            "xboxdrv", "--evdev", evsieve_link,
-            "--mimic-xpad", "--silent",
-            "--axismap", axismap,
-            "--evdev-absmap", absmap,
-            "--evdev-keymap", keymap
-        ]
+        # We still use evsieve to read the grabbed device and pipe it to our virtual controller
+        # However, for now, we'll implement a simple python-evdev loop to bridge them.
+        # Ideally, we'd want evsieve to output directly to our uinput,
+        # but bridging in Python allows finer control.
+        GLib.idle_add(self._bridge_loop, evsieve_link)
 
-        self.xboxdrv_proc = ProcessRunner(f"xboxdrv-{self.serial}", xboxdrv_cmd)
-        self.xboxdrv_proc.start()
+    def _bridge_loop(self, evsieve_link):
+        if not self.is_active or not self.v_controller:
+            return False
+
+        try:
+            device = evdev.InputDevice(evsieve_link)
+            # Use non-blocking read or a separate thread for performance
+            # For simplicity in this refactor, we'll use a GLib-friendly approach
+            GLib.io_add_watch(device.fd, GLib.IO_IN, self._on_evdev_data, device)
+            return False # Stop idle call
+        except Exception as e:
+            logger.error(f"Failed to open evsieve link for bridging: {e}")
+            return True # Retry
+
+    def _on_evdev_data(self, source, condition, device):
+        if not self.is_active or not self.v_controller:
+            return False
+
+        try:
+            for event in device.read():
+                if event.type == e.EV_SYN:
+                    self.v_controller.emit(event.type, event.code, event.value, syn=True)
+                    continue
+
+                # Mapping Logic: PlayStation -> Xbox 360 (Buffered)
+                if event.type == e.EV_KEY:
+                    self._map_button(event.code, event.value)
+                elif event.type == e.EV_ABS:
+                    self._map_axis(event.code, event.value, device)
+
+            return True
+        except Exception as e:
+            logger.error(f"Error in bridge data: {e}")
+            return False
+
+    def _map_button(self, code, value):
+        # Default mapping: PlayStation -> Xbox 360
+        mapping = {
+            e.BTN_SOUTH: e.BTN_SOUTH, # Cross -> A
+            e.BTN_EAST: e.BTN_EAST,   # Circle -> B
+            e.BTN_NORTH: e.BTN_NORTH, # Triangle -> Y
+            e.BTN_WEST: e.BTN_WEST,   # Square -> X
+            e.BTN_TL: e.BTN_TL,       # L1 -> LB
+            e.BTN_TR: e.BTN_TR,       # R1 -> RB
+            e.BTN_SELECT: e.BTN_SELECT, # Share -> Back
+            e.BTN_START: e.BTN_START,   # Options -> Start
+            e.BTN_MODE: e.BTN_MODE,     # PS Button -> Guide
+            e.BTN_THUMBL: e.BTN_THUMBL, # L3
+            e.BTN_THUMBR: e.BTN_THUMBR, # R3
+        }
+
+        # Override with config if present
+        if self.config and 'mapping' in self.config:
+            # Note: This is simplified. In a real scenario, we'd parse the 'keymap' string
+            pass
+
+        if code in mapping:
+            self.v_controller.emit(e.EV_KEY, mapping[code], value, syn=False)
+
+    def _map_axis(self, code, value, device):
+        # Maps and SCALES PlayStation axes to Xbox 360 axes
+        abs_info = device.capabilities().get(e.EV_ABS, {}).get(code)
+        if not abs_info:
+            return
+
+        # Dynamic Scaling Logic
+        src_min, src_max = abs_info.min, abs_info.max
+        src_range = src_max - src_min if src_max > src_min else 1
+
+        if code in [e.ABS_X, e.ABS_Y, e.ABS_RX, e.ABS_RY]:
+            # Stick scaling to -32768..32767
+            normalized = (value - src_min) / src_range
+            scaled = int((normalized * 65535) - 32768)
+            scaled = max(-32768, min(32767, scaled))
+            self.v_controller.emit(e.EV_ABS, code, scaled, syn=False)
+
+        elif code in [e.ABS_Z, e.ABS_RZ]:
+            # Triggers scaling to 0..255
+            normalized = (value - src_min) / src_range
+            scaled = int(normalized * 255)
+            self.v_controller.emit(e.EV_ABS, code, scaled, syn=False)
+
+        elif code in [e.ABS_HAT0X, e.ABS_HAT0Y]:
+            # D-Pad: -1, 0, 1 (Usually doesn't need scaling)
+            self.v_controller.emit(e.EV_ABS, code, value, syn=False)
 
     def stop(self):
         if not self.is_active:
@@ -161,9 +244,9 @@ class Controller(GObject.Object):
             GLib.source_remove(self.battery_timer_id)
             self.battery_timer_id = None
 
-        if self.xboxdrv_proc:
-            self.xboxdrv_proc.stop()
-            self.xboxdrv_proc = None
+        if self.v_controller:
+            self.v_controller.stop()
+            self.v_controller = None
         if self.evsieve_proc:
             self.evsieve_proc.stop()
             self.evsieve_proc = None

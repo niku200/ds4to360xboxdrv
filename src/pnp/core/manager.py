@@ -24,6 +24,7 @@ class ControllerManager(GObject.Object):
         self.monitor.connect('controller-removed', self._on_controller_removed)
 
         self.steam_paused = False
+        self.game_active = False
         self.write_status = write_status
 
     def start(self):
@@ -59,6 +60,7 @@ class ControllerManager(GObject.Object):
 
     def _on_controller_added(self, monitor, path, name, serial):
         if path not in self.controllers:
+            # config is now a dictionary
             config = self.config_manager.get_controller_config(serial)
             controller = Controller(path, name, serial, config=config)
             self.controllers[path] = controller
@@ -80,9 +82,39 @@ class ControllerManager(GObject.Object):
 
         self.steam_paused = paused
         logger.info(f"Steam pause state: {paused}")
+        self._evaluate_state()
+
+    def set_game_active(self, active):
+        if self.game_active == active:
+            return
+
+        self.game_active = active
+        logger.info(f"Game active state: {active}")
+        self._evaluate_state()
+
+    def _evaluate_state(self):
+        """
+        Logic:
+        - Manual pause flag exists -> Pause.
+        - If Steam is running AND a Game is active:
+          Steam Input SHOULD be in control. Pause PNP.
+        - If Steam is running BUT NO Game is active:
+          Steam might be just sitting there. PNP stays active for desktop/launcher use.
+        - If Steam is NOT running:
+          PNP stays active.
+        """
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        manual_pause = os.path.exists(os.path.join(runtime_dir, "pnp", "manual_pause"))
+
+        should_pause = manual_pause or (self.steam_paused and self.game_active)
+
+        # Exception: User might want PNP even if Steam is running if they
+        # haven't configured Steam Input. But default is to trust Steam.
+
+        logger.info(f"Evaluating state: ManualPause={manual_pause}, Steam={self.steam_paused}, Game={self.game_active} -> Pause={should_pause}")
 
         for controller in self.controllers.values():
-            if paused:
+            if should_pause:
                 controller.stop()
             else:
                 controller.start()
@@ -100,6 +132,7 @@ class ControllerManager(GObject.Object):
         data = {
             "active": any(c.is_active for c in self.controllers.values()),
             "steam_blocking": self.steam_paused,
+            "game_active": self.game_active,
             "controllers": [c.name for c in self.controllers.values() if c.is_active]
         }
 

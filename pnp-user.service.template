@@ -1,0 +1,16 @@
+[Unit]
+Description=PNP (PS NOT PS) - PlayStation to Xbox Controller Mapper
+After=local-fs.target bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/pnp --headless
+Restart=on-failure
+RestartSec=5s
+Environment=PYTHONPATH=%h/.local/share/pnp/src
+Environment=XDG_CONFIG_HOME=%h/.config
+Environment=XDG_CACHE_HOME=%h/.cache
+
+[Install]
+WantedBy=default.target
