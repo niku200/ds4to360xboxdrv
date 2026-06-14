@@ -57,39 +57,39 @@ class SteamDetector(GObject.Object):
 
     def _is_steam_input_engaged(self):
         """
-        Checks if Steam Input has created a virtual Xbox/Gamepad device.
-        Steam's virtual devices are created via uinput but we must be careful
-        not to detect PNP's own xboxdrv devices.
+        Checks if Steam Input has created a virtual controller.
+        Robust check: looks for ANY uinput device that is NOT PNP's.
         """
         try:
             import pyudev
             context = pyudev.Context()
             for device in context.list_devices(subsystem='input'):
-                # Only look at virtual devices (no bus type or uinput)
+                # Only interested in virtual devices (uinput)
                 if device.get('ID_BUS') in ['usb', 'bluetooth']:
                     continue
 
+                # If it's a joystick/evdev device
+                if not device.get('ID_INPUT_JOYSTICK'):
+                    continue
+
+                # Heuristic: Is it PNP?
+                is_pnp = False
                 name = device.get('NAME', '').lower()
+                if 'pnp' in name or 'xbox 360 (pnp' in name:
+                    is_pnp = True
 
-                # Check for common Steam Input virtual names
-                if 'microsoft' in name or 'xbox 360' in name:
-                    # HEURISTIC: Steam Input devices usually don't have 'xboxdrv' in the name
-                    # or specific properties we might set.
-                    # PNP's xboxdrv typically has a name like "Xbox 360 Wireless Receiver"
-                    # or similar depending on the --mimic-xpad flag.
+                # Check properties and parents for 'pnp'
+                for parent in device.traverse():
+                    p_name = parent.get('NAME', '').lower()
+                    if 'pnp' in p_name:
+                        is_pnp = True
+                        break
 
-                    # Look at the parent to see if it's from xboxdrv
-                    is_pnp = False
-                    for parent in device.traverse():
-                        if 'xboxdrv' in parent.get('NAME', '').lower() or \
-                           'pnp' in parent.get('NAME', '').lower():
-                            is_pnp = True
-                            break
-
-                    if not is_pnp:
-                        # Double check for Steam specifically if possible
-                        # Steam Input devices are often created by the 'steam' process
-                        return True
+                if not is_pnp:
+                    # If it's a virtual joystick not created by us,
+                    # assume it's Steam Input or another mapper we should yield to.
+                    logger.debug(f"Detected external virtual controller: {name}")
+                    return True
         except Exception as e:
             logger.error(f"Error checking for Steam Input device: {e}")
         return False
@@ -100,6 +100,7 @@ class SteamDetector(GObject.Object):
         or gameoverlayrenderer.so in memory maps.
         """
         try:
+            my_uid = os.getuid()
             for pid in os.listdir('/proc'):
                 if not pid.isdigit():
                     continue
@@ -109,6 +110,10 @@ class SteamDetector(GObject.Object):
                     continue
 
                 try:
+                    # Optimization: Only check our own user's processes
+                    if os.stat(f'/proc/{pid}').st_uid != my_uid and my_uid != 0:
+                        continue
+
                     # Method 1: Check environment for SteamAppId
                     with open(f'/proc/{pid}/environ', 'rb') as f:
                         # Use a reasonable read size to avoid hanging on weird files

@@ -60,6 +60,7 @@ class ControllerManager(GObject.Object):
 
     def _on_controller_added(self, monitor, path, name, serial):
         if path not in self.controllers:
+            # config is now a dictionary
             config = self.config_manager.get_controller_config(serial)
             controller = Controller(path, name, serial, config=config)
             self.controllers[path] = controller

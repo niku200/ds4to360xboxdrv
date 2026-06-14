@@ -4,6 +4,7 @@ import requests
 import re
 import glob
 from gi.repository import GLib
+from xdg import BaseDirectory
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class ProfileDownloader:
     def __init__(self):
         self.steam_root = os.path.expanduser("~/.steam/steam")
         self.userdata_path = os.path.join(self.steam_root, "userdata")
+        self.cache_dir = BaseDirectory.save_cache_path('pnp')
 
     def detect_appid(self, game_path):
         """
@@ -90,8 +92,9 @@ class ProfileDownloader:
                 return False
 
             for user_id in user_dirs:
+                # Correct Path: ~/.steam/steam/userdata/<UserID>/controller_configs/apps/<AppID>/
                 config_dir = os.path.join(
-                    self.userdata_path, user_id, "config", "controller_configs", "apps", appid
+                    self.userdata_path, user_id, "controller_configs", "apps", appid
                 )
                 os.makedirs(config_dir, exist_ok=True)
 

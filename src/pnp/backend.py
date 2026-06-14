@@ -22,8 +22,8 @@ class BackendService:
     def __init__(self):
         self.manager = ControllerManager(write_status=True)
 
-        # Get polling interval from config
-        interval = int(self.manager.config_manager.config.get('settings', 'polling_interval_ms', fallback='2000'))
+        # Get polling interval from config (dictionary-based API)
+        interval = self.manager.config_manager.config.get('poll_interval_ms', 2000)
 
         self.steam_detector = SteamDetector(interval_ms=interval)
         self.steam_detector.connect('steam-status-changed', self._on_steam_status_changed)
@@ -47,17 +47,20 @@ class BackendService:
         # 3. Steam Input is engaged (virtual device detected).
         # IF SteamRunning AND (SteamGame OR NonSteamGame) AND SteamInputEngaged -> Pause PNP.
 
+        handover_enabled = self.manager.config_manager.config.get('steam_handover_enabled', True)
+
         steam_running = self.steam_detector.is_steam_running
         game_present = self.steam_detector.is_game_active or self.game_detector.is_game_detected
         steam_input_ready = self.steam_detector.steam_input_active
 
-        should_handover = steam_running and game_present and steam_input_ready
+        should_handover = handover_enabled and steam_running and game_present and steam_input_ready
 
         logger.debug(f"Handover eval: Steam={steam_running}, Game={game_present}, SI_Ready={steam_input_ready} -> Handover={should_handover}")
         self.manager.set_game_active(should_handover)
 
         # Profile Downloader Integration
-        if game_present and steam_running:
+        downloader_enabled = self.manager.config_manager.config.get('profile_downloader_enabled', True)
+        if downloader_enabled and game_present and steam_running:
             # We don't have the path here easily from signals,
             # but we can try to detect it if the detector provides more info.
             # For now, trigger a generic check.
@@ -73,7 +76,7 @@ class BackendService:
                         env = f.read(4096)
                         if b'SteamAppId=' in env:
                             # Found a Steam game!
-                            match = re.search(b'SteamAppId=(\d+)', env)
+                            match = re.search(rb'SteamAppId=(\d+)', env)
                             if match:
                                 appid = match.group(1).decode()
                                 config = self.profile_downloader.get_best_config(appid)

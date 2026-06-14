@@ -113,18 +113,31 @@ This will generate DEB, RPM, and Arch packages in the `dist-packages/` directory
 
 ## Configuration
 
-PNP looks for its global configuration at `/etc/pnp/pnp.conf`. You can also create per-controller profiles in `~/.config/pnp/controllers/[serial].conf`.
+PNP is XDG-compliant. Configuration is stored in `$XDG_CONFIG_HOME/pnp/config.jsonc` (usually `~/.config/pnp/config.jsonc`).
 
-### Example `pnp.conf`:
-```ini
-[settings]
-rumble_gain = 15%
-steam_conflict_check = true
+PNP uses the **JSONC** (JSON with Comments) format. Legacy `.conf` files are automatically migrated on first run.
 
-[mapping]
-axismap = -y1=y1,-y2=y2
-absmap = ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y,ABS_X=X1,ABS_Y=Y1,ABS_RX=X2,ABS_RY=Y2,ABS_Z=LT,ABS_RZ=RT
-keymap = BTN_SOUTH=A,BTN_EAST=B,BTN_NORTH=Y,BTN_WEST=X,BTN_START=start,BTN_MODE=guide,BTN_SELECT=back,BTN_TL=LB,BTN_TR=RB,BTN_TL2=LT,BTN_TR2=RT,BTN_THUMBL=TL,BTN_THUMBR=TR
+### Example `config.jsonc`:
+```jsonc
+{
+    // Polling interval for game detection (ms)
+    "poll_interval_ms": 2000,
+
+    // Enable/Disable Steam Input handover
+    "steam_handover_enabled": true,
+
+    // Enable/Disable automatic profile downloading
+    "profile_downloader_enabled": true,
+
+    // Rumble strength
+    "rumble_gain": "15%",
+
+    "mapping": {
+        "axismap": "-y1=y1,-y2=y2",
+        "absmap": "ABS_X=x1,ABS_Y=y1,ABS_RX=x2,ABS_RY=y2,ABS_Z=lt,ABS_RZ=rt,ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y",
+        "keymap": "BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_TL2=lt,BTN_TR2=rt,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide"
+    }
+}
 ```
 
 ## Usage

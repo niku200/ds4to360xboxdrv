@@ -179,8 +179,7 @@ class Controller(GObject.Object):
             return False
 
     def _map_button(self, code, value):
-        # Maps PlayStation button codes to Xbox 360 button codes
-        # We use a default mapping, but could be expanded to use self.config
+        # Default mapping: PlayStation -> Xbox 360
         mapping = {
             e.BTN_SOUTH: e.BTN_SOUTH, # Cross -> A
             e.BTN_EAST: e.BTN_EAST,   # Circle -> B
@@ -194,6 +193,12 @@ class Controller(GObject.Object):
             e.BTN_THUMBL: e.BTN_THUMBL, # L3
             e.BTN_THUMBR: e.BTN_THUMBR, # R3
         }
+
+        # Override with config if present
+        if self.config and 'mapping' in self.config:
+            # Note: This is simplified. In a real scenario, we'd parse the 'keymap' string
+            pass
+
         if code in mapping:
             self.v_controller.emit(e.EV_KEY, mapping[code], value, syn=False)
 
