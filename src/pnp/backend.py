@@ -4,6 +4,7 @@ import shutil
 from gi.repository import GLib
 from pnp.core.manager import ControllerManager
 from pnp.services.steam_detector import SteamDetector
+from pnp.services.game_detector import GameDetector
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,11 +20,30 @@ class BackendService:
         self.manager = ControllerManager(write_status=True)
         self.steam_detector = SteamDetector()
         self.steam_detector.connect('steam-status-changed', self._on_steam_status_changed)
+        self.steam_detector.connect('game-status-changed', self._update_combined_game_status)
+
+        self.game_detector = GameDetector()
+        self.game_detector.connect('game-activity-detected', self._update_combined_game_status)
 
         self.loop = GLib.MainLoop()
 
     def _on_steam_status_changed(self, detector, running):
         self.manager.set_steam_paused(running)
+
+    def _update_combined_game_status(self, detector, active):
+        # Combine status from both detectors to avoid flapping
+        # Logic:
+        # 1. Any detector finds a game process.
+        # 2. Steam Input is engaged.
+        # IF (SteamGame OR NonSteamGame) AND SteamInputEngaged -> Pause PNP.
+
+        game_present = self.steam_detector.is_game_active or self.game_detector.is_game_detected
+        steam_input_ready = self.steam_detector.steam_input_active
+
+        should_handover = game_present and steam_input_ready
+
+        logger.debug(f"Handover evaluation: GamePresent={game_present}, SteamInputReady={steam_input_ready} -> Handover={should_handover}")
+        self.manager.set_game_active(should_handover)
 
     def check_dependencies(self):
         missing = []
@@ -42,6 +62,7 @@ class BackendService:
         logger.info("Starting pnp backend service...")
         self.manager.start()
         self.steam_detector.start()
+        self.game_detector.start()
         try:
             self.loop.run()
         except KeyboardInterrupt:
@@ -53,6 +74,7 @@ class BackendService:
         logger.info("Stopping backend service...")
         self.manager.stop_all()
         self.steam_detector.stop()
+        self.game_detector.stop()
         self.loop.quit()
 
 def main():
