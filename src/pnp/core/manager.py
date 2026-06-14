@@ -95,6 +95,7 @@ class ControllerManager(GObject.Object):
     def _evaluate_state(self):
         """
         Logic:
+        - Manual pause flag exists -> Pause.
         - If Steam is running AND a Game is active:
           Steam Input SHOULD be in control. Pause PNP.
         - If Steam is running BUT NO Game is active:
@@ -102,12 +103,15 @@ class ControllerManager(GObject.Object):
         - If Steam is NOT running:
           PNP stays active.
         """
-        should_pause = self.steam_paused and self.game_active
+        runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+        manual_pause = os.path.exists(os.path.join(runtime_dir, "pnp", "manual_pause"))
+
+        should_pause = manual_pause or (self.steam_paused and self.game_active)
 
         # Exception: User might want PNP even if Steam is running if they
         # haven't configured Steam Input. But default is to trust Steam.
 
-        logger.info(f"Evaluating state: Steam={self.steam_paused}, Game={self.game_active} -> Pause={should_pause}")
+        logger.info(f"Evaluating state: ManualPause={manual_pause}, Steam={self.steam_paused}, Game={self.game_active} -> Pause={should_pause}")
 
         for controller in self.controllers.values():
             if should_pause:

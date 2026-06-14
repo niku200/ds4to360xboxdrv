@@ -36,10 +36,16 @@ def is_service_active():
 def check_dependencies():
     import shutil
     missing = []
-    if not shutil.which('xboxdrv'):
-        missing.append('xboxdrv')
     if not shutil.which('evsieve'):
         missing.append('evsieve')
+    try:
+        import evdev
+    except ImportError:
+        missing.append('python-evdev')
+    try:
+        import pyudev
+    except ImportError:
+        missing.append('python-pyudev')
     return missing
 
 from pnp.gui.controller_widget import ControllerWidget
@@ -567,44 +573,32 @@ class MainWindow(Adw.ApplicationWindow):
         GLib.timeout_add(500, lambda: os._exit(0))
 
     def load_config(self):
-        config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
-        if os.path.exists(CONFIG_PATH):
-            config.read(CONFIG_PATH)
-        elif os.path.exists(LEGACY_CONFIG_PATH):
-            config.read(LEGACY_CONFIG_PATH)
+        from pnp.services.config_manager import ConfigManager
+        self.config_manager = ConfigManager()
+        config = self.config_manager.config
 
-        self.rumble_entry.set_text(config.get('settings', 'rumble_gain', fallback='15%'))
-        self.steam_switch.set_active(config.getboolean('settings', 'steam_conflict_check', fallback=True))
-        self.axismap_entry.set_text(config.get('mapping', 'axismap', fallback='-y1=y1,-y2=y2'))
-        self.absmap_entry.set_text(config.get('mapping', 'absmap', fallback='ABS_X=x1,ABS_Y=y1,ABS_RX=x2,ABS_RY=y2,ABS_Z=lt,ABS_RZ=rt,ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y'))
-        self.keymap_entry.set_text(config.get('mapping', 'keymap', fallback='BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_TL2=lt,BTN_TR2=rt,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide'))
+        self.rumble_entry.set_text(config.get('rumble_gain', '15%'))
+        self.steam_switch.set_active(config.get('steam_handover_enabled', True))
+
+        mapping = config.get('mapping', {})
+        self.axismap_entry.set_text(mapping.get('axismap', '-y1=y1,-y2=y2'))
+        self.absmap_entry.set_text(mapping.get('absmap', 'ABS_X=x1,ABS_Y=y1,ABS_RX=x2,ABS_RY=y2,ABS_Z=lt,ABS_RZ=rt,ABS_HAT0X=dpad_x,ABS_HAT0Y=dpad_y'))
+        self.keymap_entry.set_text(mapping.get('keymap', 'BTN_SOUTH=a,BTN_EAST=b,BTN_NORTH=x,BTN_WEST=y,BTN_TL=lb,BTN_TR=rb,BTN_TL2=lt,BTN_TR2=rt,BTN_THUMBL=tl,BTN_THUMBR=tr,BTN_SELECT=back,BTN_START=start,BTN_MODE=guide'))
 
     def on_save_clicked(self, button):
-        config = configparser.ConfigParser(interpolation=None, delimiters=('=',))
-        if os.path.exists(CONFIG_PATH):
-            config.read(CONFIG_PATH)
-        elif os.path.exists(LEGACY_CONFIG_PATH):
-            config.read(LEGACY_CONFIG_PATH)
+        config = self.config_manager.config
 
-        if 'settings' not in config: config['settings'] = {}
+        config['rumble_gain'] = self.rumble_entry.get_text()
+        config['steam_handover_enabled'] = self.steam_switch.get_active()
+
         if 'mapping' not in config: config['mapping'] = {}
-
-        config['settings']['rumble_gain'] = self.rumble_entry.get_text()
-        config['settings']['steam_conflict_check'] = 'true' if self.steam_switch.get_active() else 'false'
         config['mapping']['axismap'] = self.axismap_entry.get_text()
         config['mapping']['absmap'] = self.absmap_entry.get_text()
         config['mapping']['keymap'] = self.keymap_entry.get_text()
 
         try:
-            with tempfile.NamedTemporaryFile(mode="w", prefix="pnp-", suffix=".conf", delete=False) as tmp:
-                config.write(tmp)
-                tmp_path = tmp.name
-
-            # Combine multiple operations into one pkexec call
-            # Use 'install' to set permissions and copy in one go
-            cmd = f"mkdir -p {CONFIG_DIR} && install -m 644 {tmp_path} {CONFIG_PATH} && rm {tmp_path}"
-            subprocess.run(["pkexec", "sh", "-c", cmd], check=True)
-            self.show_toast("Settings saved. Restart service to apply.")
+            self.config_manager.save_config()
+            self.show_toast("Settings saved.")
         except Exception as e:
             logger.error(f"Error saving config: {e}")
             self.show_toast(f"Error saving: {e}")
@@ -724,10 +718,15 @@ class MainWindow(Adw.ApplicationWindow):
                     row.add_suffix(badge)
                     self.controllers_list.append(row)
 
-            if data.get("steam_blocking"):
+            if data.get("game_active"):
+                self.status_page.set_title("Handed over to Steam")
+                self.status_page.set_description("Steam Input is managing your controllers for the active game.")
+            elif data.get("steam_blocking"):
                 self.status_page.set_title("Paused (Steam Conflict)")
+                self.status_page.set_description("Emulation paused to avoid conflict with Steam.")
             else:
                 self.status_page.set_title(f"{len(controllers)} Controller(s) Active")
+                self.status_page.set_description("PNP is currently mapping your controllers.")
 
         except Exception as e:
             logger.error(f"Error reading status file: {e}")
