@@ -7,5 +7,5 @@ dist/
 dist-packages/
 build/
 *.egg-info/
-.rye/
+.uv/
 .python-version

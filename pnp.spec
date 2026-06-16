@@ -8,7 +8,7 @@ URL:            https://github.com/pakrohk/pnp
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  python3-devel
-BuildRequires:  rye
+BuildRequires:  uv
 BuildRequires:  python3-installer
 Requires:       xboxdrv
 Requires:       evsieve
@@ -28,7 +28,7 @@ GTK4/Libadwaita GUI and a robust backend using xboxdrv and evsieve.
 %autosetup
 
 %build
-rye build --wheel --clean
+uv build --wheel
 
 %install
 python3 -m installer --destdir=%{buildroot} --prefix=%{_prefix} dist/*.whl

@@ -25,8 +25,8 @@ build_deb() {
     if [ "$DOCKER" = "true" ]; then
         docker run --rm -v "$(pwd)":/build -w /build debian:bookworm sh -c "
             apt update && apt install -y debhelper python3-all python3-pip python3-venv curl
-            curl -sSf https://rye-up.com/get | RYE_INSTALL_OPTION='--yes' bash
-            . \$HOME/.rye/env
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            . \$HOME/.local/bin/env
             dpkg-buildpackage -us -uc -b"
     else
         if ! command -v dpkg-buildpackage > /dev/null 2>&1; then
@@ -46,8 +46,8 @@ build_rpm() {
     if [ "$DOCKER" = "true" ]; then
         docker run --rm -v "$(pwd)":/build -w /build fedora:latest sh -c "
             dnf install -y rpm-build python3-devel curl
-            curl -sSf https://rye-up.com/get | RYE_INSTALL_OPTION='--yes' bash
-            . \$HOME/.rye/env
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            . \$HOME/.local/bin/env
             mkdir -p ~/rpmbuild/SOURCES
             cp $SOURCE_TARBALL ~/rpmbuild/SOURCES/
             rpmbuild -ba pnp.spec"
@@ -72,7 +72,7 @@ build_arch() {
             pacman -Syu --noconfirm base-devel python curl
             useradd -m builduser
             chown -R builduser:builduser /build
-            sudo -u builduser bash -c 'curl -sSf https://rye-up.com/get | RYE_INSTALL_OPTION=\"--yes\" bash && . \$HOME/.rye/env && makepkg -f'"
+            sudo -u builduser bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh && . \$HOME/.local/bin/env && makepkg -f'"
     else
         if ! command -v makepkg > /dev/null 2>&1; then
             echo "Error: makepkg not found. Run with --docker."
