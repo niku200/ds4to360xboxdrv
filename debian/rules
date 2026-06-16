@@ -6,7 +6,7 @@ export PYBUILD_NAME=pnp
 	dh $@ --with python3
 
 override_dh_auto_build:
-	rye build --wheel --clean
+	uv build --wheel
 
 override_dh_auto_install:
 	python3 -m installer --destdir=debian/pnp --prefix=/usr dist/*.whl

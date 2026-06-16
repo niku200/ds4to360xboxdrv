@@ -133,15 +133,14 @@ This script forces Steam Input to engage by spoofing a Steam environment, allowi
 
 ## ⌨️ Command Line Interface
 
-PNP offers several CLI commands for headless management:
+PNP offers several CLI commands for headless management. If you are developing and using **uv**, you can run these via:
 
-- `pnp start`: Start the background service.
-- `pnp stop`: Stop the background service.
-- `pnp status`: Show service status and active controllers.
-- `pnp pause`: Manually pause emulation.
-- `pnp resume`: Resume emulation.
-- `pnp --headless`: Run the backend service in the current terminal.
-- `pnp --debug`: Enable verbose logging for troubleshooting.
+- `uv run pnp --headless`: Run the backend service in the current terminal.
+- `uv run pnp-gui --debug`: Launch the GUI with verbose logging.
+
+When installed on your system, use the native wrappers:
+- `pnp-backend`: Start the background service (headless).
+- `pnp-gui`: Launch the management interface.
 
 ---
 
