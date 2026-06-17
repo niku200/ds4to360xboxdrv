@@ -1,53 +1,53 @@
-import os
 import sys
-import shutil
-import logging
-import subprocess
+import os
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtCore import QTimer
+from loguru import logger
+from pnp.gui.backend import Backend
 
-# Wayland / X11 compatibility fixes
-wayland_display = os.environ.get('WAYLAND_DISPLAY')
-is_plasma = 'plasma' in os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
+class LogSink:
+    def __init__(self, backend):
+        self.backend = backend
 
-if wayland_display and is_plasma and not os.environ.get('GDK_BACKEND'):
-    # Try Wayland first – GTK4 works well on Plasma 5.27+
-    os.environ['GDK_BACKEND'] = 'wayland'
-
-# Disable GDK internal scaling overrides to let the compositor handle it
-os.environ['GDK_DPI_SCALE'] = '1'
-os.environ['GDK_SCALE'] = '1'
-
-import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib, Gio
-from pnp.gui.main_window import Application
-from pnp.core.manager import ControllerManager
-
-# Configure logging
-# For GUI, logging to stderr is usually enough as it can be captured if run from terminal
-# or viewed in journal if launched via desktop entry (sometimes).
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
+    def write(self, message):
+        # Remove ANSI color codes if any
+        import re
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        clean_msg = ansi_escape.sub('', message)
+        self.backend.appendLog(clean_msg)
 
 def main():
-    # The GUI should be a shell. We don't start the manager here.
-    # We let the Application handle its own lifecycle.
-    try:
-        app = Application()
-        res = app.run(sys.argv)
-        # Ensure we exit completely even if some threads are still hanging around
-        # (like the journalctl monitor)
-        os._exit(res)
-    except Exception as e:
-        logger.critical(f"Unhandled exception in GUI: {e}", exc_info=True)
-        os._exit(1)
+    # Ensure src directory is in sys.path
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(script_dir))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    app = QGuiApplication(sys.argv)
+    app.setApplicationName("PNP")
+    app.setOrganizationName("pakrohk")
+    app.setApplicationVersion("5.2.0")
+
+    engine = QQmlApplicationEngine()
+
+    backend = Backend()
+    engine.rootContext().setContextProperty("backend", backend)
+
+    # Configure Loguru
+    logger.remove() # Remove default handler
+    logger.add(sys.stderr, colorize=True, format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
+
+    log_sink = LogSink(backend)
+    logger.add(log_sink.write, format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}\n")
+
+    qml_file = os.path.join(os.path.dirname(__file__), "qml", "main.qml")
+    engine.load(qml_file)
+
+    if not engine.rootObjects():
+        sys.exit(-1)
+
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()

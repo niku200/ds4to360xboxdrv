@@ -1,12 +1,10 @@
 import os
-import logging
 import requests
 import re
 import glob
-from gi.repository import GLib
+from loguru import logger
 from xdg import BaseDirectory
 
-logger = logging.getLogger(__name__)
 
 class ProfileDownloader:
     """

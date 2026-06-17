@@ -7,7 +7,8 @@ authors = [
 ]
 license = { text = "MIT" }
 dependencies = [
-    "PyGObject>=3.42.0",
+    "PySide6>=6.5.0",
+    "loguru>=0.7.0",
     "evdev>=1.6.0",
     "pyudev>=0.24.0",
     "commentjson>=0.9.0",
@@ -54,12 +55,3 @@ dev = [
 ]
 [tool.uv]
 managed = true
-[[tool.uv.index]]
-name = "tsinghua"
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-[[tool.uv.index]]
-name = "aliyun"
-url = "https://mirrors.aliyun.com/pypi/simple"
-[[tool.uv.index]]
-name = "pypi"
-url = "https://pypi.org/simple"

@@ -1,79 +1,68 @@
 import json
 import os
-import logging
-from gi.repository import GObject, GLib
+from PySide6.QtCore import QObject, Signal, QTimer
+from loguru import logger
 from pnp.core.controller import Controller
 from pnp.core.device_monitor import DeviceMonitor
 from pnp.services.config_manager import ConfigManager
 
-logger = logging.getLogger(__name__)
-
-class ControllerManager(GObject.Object):
-    __gsignals__ = {
-        'controller-list-changed': (GObject.SignalFlags.RUN_FIRST, None, ()),
-    }
+class ControllerManager(QObject):
+    controller_list_changed = Signal()
 
     STATUS_FILE = "/run/pnp/status.json"
 
     def __init__(self, write_status=False):
-        GObject.Object.__init__(self)
+        super().__init__()
         self.controllers = {} # path -> Controller object
         self.config_manager = ConfigManager()
         self.monitor = DeviceMonitor()
-        self.monitor.connect('controller-added', self._on_controller_added)
-        self.monitor.connect('controller-removed', self._on_controller_removed)
+        self.monitor.controller_added.connect(self._on_controller_added)
+        self.monitor.controller_removed.connect(self._on_controller_removed)
 
         self.steam_paused = False
         self.game_active = False
         self.write_status = write_status
 
+        self.check_timer = QTimer()
+        self.check_timer.timeout.connect(self._check_controller_processes)
+
     def start(self):
         self.monitor.start()
         self._update_status_file()
-        GLib.timeout_add(5000, self._check_controller_processes)
+        self.check_timer.start(5000)
 
     def _check_controller_processes(self):
         changed = False
         for path, controller in list(self.controllers.items()):
             if controller.is_active:
                 evsieve_died = controller.evsieve_proc and not controller.evsieve_proc.is_running()
-                xboxdrv_died = controller.xboxdrv_proc and not controller.xboxdrv_proc.is_running()
-                if evsieve_died or xboxdrv_died:
-                    # Throttled restart log
-                    msg = f"Controller processes for {controller.name} died unexpectedly. Restarting."
-                    if not hasattr(self, '_last_warn') or self._last_warn != msg:
-                        logger.warning(msg)
-                        if evsieve_died:
-                            err = controller.evsieve_proc.get_stderr()
-                            if err: logger.error(f"evsieve error: {err.strip()}")
-                        if xboxdrv_died:
-                            err = controller.xboxdrv_proc.get_stderr()
-                            if err: logger.error(f"xboxdrv error: {err.strip()}")
-                        self._last_warn = msg
+                if evsieve_died:
+                    logger.warning(f"Controller processes for {controller.name} died unexpectedly. Restarting.")
+                    err = controller.evsieve_proc.get_stderr()
+                    if err: logger.error(f"evsieve error: {err.strip()}")
+
                     controller.stop()
                     if not self.steam_paused:
                         controller.start()
                     changed = True
         if changed:
             self._update_status_file()
-        return True
 
-    def _on_controller_added(self, monitor, path, name, serial):
+    def _on_controller_added(self, path, name, serial):
         if path not in self.controllers:
-            # config is now a dictionary
             config = self.config_manager.get_controller_config(serial)
             controller = Controller(path, name, serial, config=config)
             self.controllers[path] = controller
             if not self.steam_paused:
                 controller.start()
-            self.emit('controller-list-changed')
+            self.controller_list_changed.emit()
             self._update_status_file()
 
-    def _on_controller_removed(self, monitor, path):
+    def _on_controller_removed(self, path):
         if path in self.controllers:
             self.controllers[path].stop()
             del self.controllers[path]
-            self.emit('controller-list-changed')
+            self.controller_list_changed.emit()
             self._update_status_file()
 
     def set_steam_paused(self, paused):
@@ -93,23 +82,10 @@ class ControllerManager(GObject.Object):
         self._evaluate_state()
 
     def _evaluate_state(self):
-        """
-        Logic:
-        - Manual pause flag exists -> Pause.
-        - If Steam is running AND a Game is active:
-          Steam Input SHOULD be in control. Pause PNP.
-        - If Steam is running BUT NO Game is active:
-          Steam might be just sitting there. PNP stays active for desktop/launcher use.
-        - If Steam is NOT running:
-          PNP stays active.
-        """
         runtime_dir = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
         manual_pause = os.path.exists(os.path.join(runtime_dir, "pnp", "manual_pause"))
 
         should_pause = manual_pause or (self.steam_paused and self.game_active)
-
-        # Exception: User might want PNP even if Steam is running if they
-        # haven't configured Steam Input. But default is to trust Steam.
 
         logger.info(f"Evaluating state: ManualPause={manual_pause}, Steam={self.steam_paused}, Game={self.game_active} -> Pause={should_pause}")
 

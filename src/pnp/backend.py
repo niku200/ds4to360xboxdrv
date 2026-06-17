@@ -3,50 +3,32 @@ import sys
 import shutil
 import os
 import re
-from gi.repository import GLib
+from PySide6.QtCore import QCoreApplication, QTimer
+from loguru import logger
 from pnp.core.manager import ControllerManager
 from pnp.services.steam_detector import SteamDetector
 from pnp.services.game_detector import GameDetector
 from pnp.services.profile_downloader import ProfileDownloader
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
 class BackendService:
     def __init__(self):
         self.manager = ControllerManager(write_status=True)
 
-        # Get polling interval from config (dictionary-based API)
         interval = self.manager.config_manager.config.get('poll_interval_ms', 2000)
 
         self.steam_detector = SteamDetector(interval_ms=interval)
-        self.steam_detector.connect('steam-status-changed', self._on_steam_status_changed)
-        self.steam_detector.connect('game-status-changed', self._update_combined_game_status)
+        self.steam_detector.steam_status_changed.connect(self._on_steam_status_changed)
+        self.steam_detector.game_status_changed.connect(self._update_combined_game_status)
 
         self.game_detector = GameDetector(interval_ms=interval)
-        self.game_detector.connect('game-activity-detected', self._update_combined_game_status)
+        self.game_detector.game_activity_detected.connect(self._update_combined_game_status)
 
         self.profile_downloader = ProfileDownloader()
 
-        self.loop = GLib.MainLoop()
-
-    def _on_steam_status_changed(self, detector, running):
+    def _on_steam_status_changed(self, running):
         self.manager.set_steam_paused(running)
 
-    def _update_combined_game_status(self, detector, active):
-        # Combine status from both detectors to avoid flapping
-        # Logic:
-        # 1. Steam MUST be running.
-        # 2. Any detector finds a game process.
-        # 3. Steam Input is engaged (virtual device detected).
-        # IF SteamRunning AND (SteamGame OR NonSteamGame) AND SteamInputEngaged -> Pause PNP.
-
+    def _update_combined_game_status(self, active):
         handover_enabled = self.manager.config_manager.config.get('steam_handover_enabled', True)
 
         steam_running = self.steam_detector.is_steam_running
@@ -58,16 +40,11 @@ class BackendService:
         logger.debug(f"Handover eval: Steam={steam_running}, Game={game_present}, SI_Ready={steam_input_ready} -> Handover={should_handover}")
         self.manager.set_game_active(should_handover)
 
-        # Profile Downloader Integration
         downloader_enabled = self.manager.config_manager.config.get('profile_downloader_enabled', True)
         if downloader_enabled and game_present and steam_running:
-            # We don't have the path here easily from signals,
-            # but we can try to detect it if the detector provides more info.
-            # For now, trigger a generic check.
-            GLib.idle_add(self._trigger_profile_check)
+            QTimer.singleShot(0, self._trigger_profile_check)
 
     def _trigger_profile_check(self):
-        # Search for a running game and try to find its AppID
         try:
             for pid in os.listdir('/proc'):
                 if not pid.isdigit(): continue
@@ -75,7 +52,6 @@ class BackendService:
                     with open(f'/proc/{pid}/environ', 'rb') as f:
                         env = f.read(4096)
                         if b'SteamAppId=' in env:
-                            # Found a Steam game!
                             match = re.search(rb'SteamAppId=(\d+)', env)
                             if match:
                                 appid = match.group(1).decode()
@@ -83,10 +59,9 @@ class BackendService:
                                 if config:
                                     self.profile_downloader.apply_config(appid, config)
                                     self.profile_downloader.trigger_steam_reload()
-                                return False # Stop search
+                                return
                 except: continue
         except: pass
-        return False
 
     def check_dependencies(self):
         missing = []
@@ -108,23 +83,18 @@ class BackendService:
         self.manager.start()
         self.steam_detector.start()
         self.game_detector.start()
-        try:
-            self.loop.run()
-        except KeyboardInterrupt:
-            self.stop()
-        except Exception as e:
-            logger.critical(f"Critical error in backend service: {e}", exc_info=True)
 
     def stop(self):
         logger.info("Stopping backend service...")
         self.manager.stop_all()
         self.steam_detector.stop()
         self.game_detector.stop()
-        self.loop.quit()
 
 def main():
+    app = QCoreApplication(sys.argv)
     service = BackendService()
     service.run()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
