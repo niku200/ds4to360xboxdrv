@@ -12,6 +12,7 @@ from pnp.services.config_manager import ConfigManager
 from pnp.services.profile_downloader import ProfileDownloader
 from pnp.diagnostics.engine import DiagnosticSystem
 from pnp.helpers.steam_library import get_steam_games
+from pnp.services.nonsteam_manager import NonSteamManager
 
 QML_IMPORT_NAME = "ir.pakrohk.pnp"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -85,6 +86,7 @@ class Backend(QObject):
     controllersChanged = Signal()
     testerDevicesChanged = Signal()
     steamGamesChanged = Signal()
+    nonSteamGamesChanged = Signal()
     configChanged = Signal()
     logsChanged = Signal()
     serviceActiveChanged = Signal()
@@ -107,6 +109,8 @@ class Backend(QObject):
         self._diag_issues = []
         self._profile_downloader = ProfileDownloader()
         self._steam_games = []
+        self._nonsteam_manager = NonSteamManager()
+        self._non_steam_games = []
 
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
@@ -205,6 +209,39 @@ class Backend(QObject):
     @Property(list, notify=steamGamesChanged)
     def steamGames(self):
         return self._steam_games
+
+    @Property(list, notify=nonSteamGamesChanged)
+    def nonSteamGames(self):
+        return self._non_steam_games
+
+    @Slot()
+    def refreshNonSteamGames(self):
+        # Run scan in a thread to avoid freezing UI
+        def run_scan():
+            self._non_steam_games = self._nonsteam_manager.do_scan()
+            self.nonSteamGamesChanged.emit()
+
+        threading.Thread(target=run_scan, daemon=True).start()
+
+    @Slot(dict)
+    def addNonSteamGame(self, game):
+        def run_action():
+            success, message = self._nonsteam_manager.add_to_steam(game)
+            self.fixCompleted.emit(success, message)
+            if success:
+                self.refreshNonSteamGames()
+
+        threading.Thread(target=run_action, daemon=True).start()
+
+    @Slot(str)
+    def removeNonSteamGame(self, game_title):
+        def run_action():
+            success, message = self._nonsteam_manager.remove_from_steam(game_title)
+            self.fixCompleted.emit(success, message)
+            if success:
+                self.refreshNonSteamGames()
+
+        threading.Thread(target=run_action, daemon=True).start()
 
     @Slot()
     def refreshSteamGames(self):

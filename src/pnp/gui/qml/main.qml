@@ -25,6 +25,7 @@ ApplicationWindow {
 
             MonitorPage {}
             GameLibraryPage {}
+            NonSteamPage {}
             TesterPage {}
             DiagnosticPage {}
             SettingsPage {}
@@ -41,6 +42,9 @@ ApplicationWindow {
             }
             TabButton {
                 text: "🎮 Library"
+            }
+            TabButton {
+                text: "🚀 Non-Steam"
             }
             TabButton {
                 text: "🎮 Tester"

@@ -34,6 +34,8 @@ The project has moved from a GObject-based architecture to a Qt-based one. This 
     - `MonitorPage.qml`: Controller management and battery status.
     - `TesterPage.qml`: Real-time input visualization.
     - `SettingsPage.qml`: Configuration and service management.
+    - `GameLibraryPage.qml`: Steam Input profile management.
+    - `NonSteamPage.qml`: Heroic/Hydra games integration.
     - `LogPage.qml`: System logs.
 
 ### Python-QML Bridge

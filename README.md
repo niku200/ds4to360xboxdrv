@@ -18,6 +18,7 @@
 - **🔥 Non-Steam Game Power**: Use the `pnp-steam-run` wrapper to force Steam Input features (Gyro, Touchpad, Community Layouts) on *any* standalone executable or emulator.
 - **🔋 Battery Tracking**: Real-time monitoring of controller battery levels and charging status directly in the GUI.
 - **🔍 Visual Input Tester**: A beautiful, real-time visualizer to verify your button mappings and stick accuracy at 60Hz.
+- **🚀 Non-Steam Game Management**: Effortlessly discover games from **Heroic Games Launcher** and **Hydra Launcher**, and add them to Steam as non-Steam games with optimized Steam Input configuration.
 - **🛡️ Diagnostic System**: Built-in system health checks with one-click automated recovery via Polkit.
 - **📜 Professional Logging**: Integrated with **Loguru** for real-time, color-coded logging in both terminal and GUI.
 - **⚙️ XDG & JSONC**: Fully compliant with Linux filesystem standards. Easy-to-edit configuration using JSON with comments (JSONC).
@@ -83,6 +84,8 @@ pnp-gui
 ## 🖥️ GUI Overview
 
 - **Monitor Tab**: Toggle individual controllers, see connected devices, and monitor battery levels in real-time.
+- **Library Tab**: Browse your Steam library and download optimized controller profiles.
+- **Non-Steam Tab**: Discover Heroic and Hydra games and integrate them with Steam for full Steam Input support.
 - **Tester Tab**: A high-performance real-time visualizer for buttons, sticks, and triggers.
 - **Settings Tab**: Configure handover behavior, rumble strength, system service, and custom mappings.
 - **Logs Tab**: Professional log viewer with real-time updates from the background service and GUI.
