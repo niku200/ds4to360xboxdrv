@@ -1,9 +1,8 @@
 import subprocess
 import os
 import signal
-import logging
+from loguru import logger
 
-logger = logging.getLogger(__name__)
 
 class ProcessRunner:
     def __init__(self, name, command, env=None):
@@ -18,7 +17,8 @@ class ProcessRunner:
 
         try:
             logger.debug(f"Starting {self.name}: {' '.join(self.command)}")
-            # Use PIPE for stderr so we can report errors if it fails to start or dies
+            # Use PIPE for stderr so we can report errors if it fails to
+            # start or dies
             self.process = subprocess.Popen(
                 self.command,
                 env=self.env,
@@ -27,19 +27,18 @@ class ProcessRunner:
                 text=True,
                 start_new_session=True
             )
-        except Exception as e:
-            logger.error(f"Failed to start {self.name}: {e}")
+        except Exception as err:
+            logger.error(f"Failed to start {self.name}: {err}")
 
     def get_stderr(self):
         if self.process and self.process.stderr:
-            # Non-blocking read would be better, but for now we just try to read what's there
             try:
                 import fcntl
                 fd = self.process.stderr.fileno()
                 fl = fcntl.fcntl(fd, fcntl.F_GETFL)
                 fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
                 return self.process.stderr.read()
-            except:
+            except Exception:
                 return None
         return None
 
@@ -61,10 +60,10 @@ class ProcessRunner:
                 self.process.wait(timeout=2)
             except (ProcessLookupError, PermissionError):
                 pass
-            except Exception as e:
-                logger.error(f"Error killing {self.name}: {e}")
-        except Exception as e:
-            logger.error(f"Error stopping {self.name}: {e}")
+            except Exception as err:
+                logger.error(f"Error killing {self.name}: {err}")
+        except Exception as err:
+            logger.error(f"Error stopping {self.name}: {err}")
         finally:
             self.process = None
 

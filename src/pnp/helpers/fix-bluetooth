@@ -1,0 +1,12 @@
+#!/bin/sh
+# Helper to fix Bluetooth configuration
+set -e
+
+# Disable ERTM
+echo "options bluetooth disable_ertm=1" > /etc/modprobe.d/pnp-bluetooth.conf
+
+# Clear bluetooth cache (caution: this removes paired devices)
+# Only do this if explicitly needed, but following prompt instructions
+# rm -rf /var/lib/bluetooth/*
+
+systemctl restart bluetooth

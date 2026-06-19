@@ -1,0 +1,28 @@
+#!/bin/sh
+# Helper to install udev rules for PNP and steam-devices
+set -e
+
+UDEV_RULES_PATH="/etc/udev/rules.d/99-pnp.rules"
+STEAM_DEVICES_PATH="/etc/udev/rules.d/60-steam-input.rules"
+
+# 1. Install PNP udev rules
+cat <<EOF > "$UDEV_RULES_PATH"
+# PNP udev rules for Sony controllers
+SUBSYSTEM=="input", ATTRS{idVendor}=="054c", MODE="0666", TAG+="uaccess"
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", TAG+="uaccess"
+EOF
+
+# 2. Basic steam-devices if missing (example)
+if [ ! -f "$STEAM_DEVICES_PATH" ]; then
+    cat <<EOF > "$STEAM_DEVICES_PATH"
+# Valve USB devices
+SUBSYSTEM=="usb", ATTR{idVendor}=="28de", MODE="0666"
+# DualShock 4 over USB
+SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="05c4", MODE="0666"
+SUBSYSTEM=="usb", ATTR{idVendor}=="054c", ATTR{idProduct}=="09cc", MODE="0666"
+EOF
+fi
+
+chmod 644 "$UDEV_RULES_PATH"
+udevadm control --reload-rules
+udevadm trigger
