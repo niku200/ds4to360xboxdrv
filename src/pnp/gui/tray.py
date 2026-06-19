@@ -3,6 +3,7 @@ from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import QObject, Signal
 from loguru import logger
 
+
 class TrayManager(QObject):
     show_window_requested = Signal()
     quit_requested = Signal()

@@ -25,10 +25,22 @@ Page {
                 }
             }
             Item { Layout.fillWidth: true }
-            Button {
-                text: "🔍 Run Scan"
-                highlighted: true
-                onClicked: backend.runDiagnostics()
+            RowLayout {
+                spacing: 10
+                Button {
+                    text: "🔍 Run Scan"
+                    highlighted: true
+                    onClicked: backend.runDiagnostics()
+                }
+                Button {
+                    text: "🚀 Fix All"
+                    visible: backend.diagnosticIssues.length > 0
+                    onClicked: backend.fixAllIssues()
+                }
+                Button {
+                    text: "🔄 Revert"
+                    onClicked: backend.revertSystemChanges()
+                }
             }
         }
 

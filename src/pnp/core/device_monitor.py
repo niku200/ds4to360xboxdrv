@@ -2,11 +2,12 @@ import pyudev
 from PySide6.QtCore import QObject, Signal, QSocketNotifier
 from loguru import logger
 
-class DeviceMonitor(QObject):
-    controller_added = Signal(str, str, str) # path, name, serial
-    controller_removed = Signal(str) # path
 
-    SONY_VENDORS = ["054c", "054C"] # Sony Interactive Entertainment
+class DeviceMonitor(QObject):
+    controller_added = Signal(str, str, str)  # path, name, serial
+    controller_removed = Signal(str)  # path
+
+    SONY_VENDORS = ["054c", "054C"]  # Sony Interactive Entertainment
 
     def __init__(self):
         super().__init__()
@@ -18,29 +19,36 @@ class DeviceMonitor(QObject):
 
     def start(self):
         # Initial scan
-        for device in self.context.list_devices(subsystem='input', ID_INPUT_JOYSTICK='1'):
+        for device in self.context.list_devices(
+            subsystem='input', ID_INPUT_JOYSTICK='1'
+        ):
             if self._is_sony_controller(device):
                 self._add_device(device)
 
         # Start monitoring using QSocketNotifier
         self.monitor.start()
-        self.notifier = QSocketNotifier(self.monitor.fileno(), QSocketNotifier.Read)
+        self.notifier = QSocketNotifier(
+            self.monitor.fileno(), QSocketNotifier.Read
+        )
         self.notifier.activated.connect(self._on_monitor_event)
         logger.info("Device monitor started.")
 
     def _is_sony_controller(self, device):
         vendor = device.get('ID_VENDOR_ID')
         # Check if it's a Sony vendor ID and a joystick
-        is_sony = vendor in self.SONY_VENDORS and device.get('ID_INPUT_JOYSTICK') == '1'
+        is_sony = (vendor in self.SONY_VENDORS and
+                   device.get('ID_INPUT_JOYSTICK') == '1')
 
         # Avoid recursive detection: ignore virtual/emulated devices
         bus = device.get('ID_BUS')
         is_physical = bus in ['usb', 'bluetooth']
 
         model_name = device.get('ID_MODEL', '').lower()
-        is_emulated = 'evsieve' in model_name or 'xbox' in model_name or 'pnp' in model_name
+        is_emulated = ('evsieve' in model_name or 'xbox' in model_name or
+                       'pnp' in model_name)
 
-        return is_sony and is_physical and not is_emulated and device.device_node and "event" in device.device_node
+        return (is_sony and is_physical and not is_emulated and
+                device.device_node and "event" in device.device_node)
 
     def _on_monitor_event(self):
         device = self.monitor.poll()

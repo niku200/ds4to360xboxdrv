@@ -1,5 +1,4 @@
 import os
-import sys
 import json
 import subprocess
 import threading
@@ -14,6 +13,7 @@ from pnp.diagnostics.engine import DiagnosticSystem
 
 QML_IMPORT_NAME = "ir.pakrohk.pnp"
 QML_IMPORT_MAJOR_VERSION = 1
+
 
 class TesterWorker(QObject):
     updated = Signal()
@@ -32,28 +32,40 @@ class TesterWorker(QObject):
         try:
             self.device = evdev.InputDevice(self.path)
             self.name = self.device.name
-            self.is_virtual = "xbox" in self.name.lower() or "pnp" in self.name.lower()
+            self.is_virtual = (
+                "xbox" in self.name.lower() or "pnp" in self.name.lower()
+            )
             self.notifier = QSocketNotifier(self.device.fd, QSocketNotifier.Read)
             self.notifier.activated.connect(self._read_events)
-        except Exception as e:
-            logger.error(f"TesterWorker failed to open {self.path}: {e}")
+        except Exception as err:
+            logger.error(f"TesterWorker failed to open {self.path}: {err}")
 
     def _read_events(self):
         try:
+            if not self.device:
+                return
+            changed = False
             for event in self.device.read():
                 if event.type == evdev.ecodes.EV_KEY:
-                    self.buttons[event.code] = bool(event.value)
-                    self.updated.emit()
+                    if self.buttons.get(event.code) != bool(event.value):
+                        self.buttons[event.code] = bool(event.value)
+                        changed = True
                 elif event.type == evdev.ecodes.EV_ABS:
                     # Mapping for common axes
                     mapping = {0: 0, 1: 1, 3: 2, 4: 3, 2: 4, 5: 5}
                     if event.code in mapping:
                         idx = mapping[event.code]
-                        absinfo = self.device.capabilities()[evdev.ecodes.EV_ABS][event.code]
-                        val = (event.value - absinfo.min) / (absinfo.max - absinfo.min)
-                        self.axes[idx] = val
-                        self.updated.emit()
-        except:
+                        abs_cap = self.device.capabilities()[evdev.ecodes.EV_ABS]
+                        absinfo = abs_cap[event.code]
+                        val = (event.value - absinfo.min) / (
+                            absinfo.max - absinfo.min
+                        )
+                        if abs(self.axes[idx] - val) > 0.01: # Threshold
+                            self.axes[idx] = val
+                            changed = True
+            if changed:
+                self.updated.emit()
+        except Exception:
             pass
 
     def to_dict(self):
@@ -64,6 +76,7 @@ class TesterWorker(QObject):
             "buttons": self.buttons,
             "axes": self.axes
         }
+
 
 @QmlElement
 class Backend(QObject):
@@ -79,13 +92,13 @@ class Backend(QObject):
         super().__init__()
         self._manager = None
         self._config_manager = ConfigManager()
-        self._logs = [] # Store as list for easier filtering
+        self._logs = []  # Store as list for easier filtering
         self._filtered_logs = ""
         self._log_level_filter = "All"
         self._log_module_filter = "All"
 
         self._service_active = False
-        self._tester_workers = {} # path -> TesterWorker
+        self._tester_workers = {}  # path -> TesterWorker
         self._is_observer = True
         self._diag_system = DiagnosticSystem()
         self._diag_issues = []
@@ -109,17 +122,24 @@ class Backend(QObject):
             self._is_observer = False
             self._manager = ControllerManager()
             self._manager.start()
-            self._manager.controller_list_changed.connect(self.controllersChanged)
+            self._manager.controller_list_changed.connect(
+                self.controllersChanged
+            )
 
     def _check_service_active(self):
         try:
-            res = subprocess.run(["systemctl", "is-active", "pnp.service"], capture_output=True, text=True)
+            res = subprocess.run(
+                ["systemctl", "is-active", "pnp.service"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
             active = res.stdout.strip() == "active"
             if active != self._service_active:
                 self._service_active = active
                 self.serviceActiveChanged.emit()
             return active
-        except:
+        except Exception:
             return False
 
     def _update_status(self):
@@ -156,7 +176,7 @@ class Backend(QObject):
         try:
             status_file = "/run/pnp/status.json"
             if os.path.exists(status_file):
-                with open(status_file, "r") as f:
+                with open(status_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return [
                         {
@@ -169,7 +189,7 @@ class Backend(QObject):
                         }
                         for name in data.get("controllers", [])
                     ]
-        except:
+        except Exception:
             pass
         return []
 
@@ -181,8 +201,11 @@ class Backend(QObject):
         import pyudev
         ctx = pyudev.Context()
         current_paths = set()
-        for device in ctx.list_devices(subsystem='input', ID_INPUT_JOYSTICK='1'):
-            if not device.device_node: continue
+        for device in ctx.list_devices(
+            subsystem='input', ID_INPUT_JOYSTICK='1'
+        ):
+            if not device.device_node:
+                continue
             path = device.device_node
             current_paths.add(path)
             if path not in self._tester_workers:
@@ -221,7 +244,9 @@ class Backend(QObject):
         logger.info("Running system diagnostics...")
         self._diag_issues = self._diag_system.run_all_checks()
         self.diagnosticIssuesChanged.emit()
-        logger.info(f"Diagnostics complete. Found {len(self._diag_issues)} issues.")
+        logger.info(
+            f"Diagnostics complete. Found {len(self._diag_issues)} issues."
+        )
 
     @Slot(str)
     def applyDiagnosticFix(self, issue_id):
@@ -232,18 +257,41 @@ class Backend(QObject):
             # Re-run diagnostics to update the list
             QTimer.singleShot(1000, self.runDiagnostics)
 
+    @Slot()
+    def fixAllIssues(self):
+        logger.info("User requested to fix all issues.")
+        success, message = self._diag_system.fix_all()
+        self.fixCompleted.emit(success, message)
+        if success:
+            QTimer.singleShot(1000, self.runDiagnostics)
+
+    @Slot()
+    def revertSystemChanges(self):
+        logger.info("User requested to revert system changes.")
+        success, message = self._diag_system.revert_changes()
+        self.fixCompleted.emit(success, message)
+        if success:
+            QTimer.singleShot(1000, self.runDiagnostics)
+
     @Slot(str, bool)
     def toggleController(self, path, active):
-        if not self._is_observer and self._manager and path in self._manager.controllers:
+        if (not self._is_observer and self._manager and
+                path in self._manager.controllers):
             c = self._manager.controllers[path]
-            if active: c.start()
-            else: c.stop()
+            if active:
+                c.start()
+            else:
+                c.stop()
             self.controllersChanged.emit()
 
     @Slot(bool)
     def toggleService(self, active):
-        cmd = ["pkexec", "systemctl", "start" if active else "stop", "pnp.service"]
-        threading.Thread(target=lambda: subprocess.run(cmd), daemon=True).start()
+        cmd = ["pkexec", "systemctl", "start" if active else "stop",
+               "pnp.service"]
+        threading.Thread(
+            target=lambda: subprocess.run(cmd, check=False),
+            daemon=True
+        ).start()
 
     @Slot(str, 'QVariant')
     def updateConfig(self, key, value):
@@ -260,20 +308,28 @@ class Backend(QObject):
     @Slot()
     def saveConfig(self):
         self._config_manager.save_config()
-        logger.info("Config: Settings saved to " + self._config_manager.config_path)
+        logger.info(
+            "Config: Settings saved to " + self._config_manager.config_path
+        )
 
     @Slot(str)
     def loadProfile(self, profile_name):
         logger.info(f"Config: Loading profile '{profile_name}'...")
         # In a real app, this would load a specific .jsonc file
         # For now, we simulate success
-        QTimer.singleShot(500, lambda: logger.info(f"Config: Profile '{profile_name}' loaded."))
+        QTimer.singleShot(
+            500, lambda: logger.info(f"Config: Profile '{profile_name}' loaded.")
+        )
 
     @Slot(str)
     def saveProfile(self, profile_name):
-        logger.info(f"Config: Saving current settings as profile '{profile_name}'...")
+        logger.info(
+            f"Config: Saving current settings as profile '{profile_name}'..."
+        )
         # Simulate saving to a new file
-        QTimer.singleShot(500, lambda: logger.info(f"Config: Profile '{profile_name}' saved."))
+        QTimer.singleShot(
+            500, lambda: logger.info(f"Config: Profile '{profile_name}' saved.")
+        )
 
     @Slot()
     def clearLogs(self):
@@ -292,7 +348,8 @@ class Backend(QObject):
 
     @Slot(str)
     def appendLog(self, message):
-        # Ensure thread safety by using a single-shot timer to call the internal update
+        # Ensure thread safety by using a single-shot timer to call
+        # the internal update
         QTimer.singleShot(0, lambda: self._append_log_internal(message))
 
     def _append_log_internal(self, message):
@@ -324,9 +381,11 @@ class Backend(QObject):
     def _update_filtered_logs(self):
         filtered = []
         for entry in self._logs:
-            if self._log_level_filter != "All" and entry["level"] != self._log_level_filter:
+            if (self._log_level_filter != "All" and
+                    entry["level"] != self._log_level_filter):
                 continue
-            if self._log_module_filter != "All" and entry["module"] != self._log_module_filter:
+            if (self._log_module_filter != "All" and
+                    entry["module"] != self._log_module_filter):
                 continue
             filtered.append(entry["full"])
 
@@ -337,14 +396,17 @@ class Backend(QObject):
     def syncWithSteam(self):
         logger.info("Steam: Explicit synchronization triggered.")
         try:
-            subprocess.run(["steam", "steam://reloadcontrollerconfigs"])
-        except:
+            subprocess.run(
+                ["steam", "steam://reloadcontrollerconfigs"],
+                check=False
+            )
+        except Exception:
             pass
 
     @Slot()
     def connectToSteam(self):
         logger.info("Steam: Attempting to connect to Steam...")
         try:
-            subprocess.run(["steam", "steam://open/main"])
-        except:
+            subprocess.run(["steam", "steam://open/main"], check=False)
+        except Exception:
             pass

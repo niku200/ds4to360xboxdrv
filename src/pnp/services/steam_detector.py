@@ -3,6 +3,7 @@ import os
 from PySide6.QtCore import QObject, Signal, QTimer
 from loguru import logger
 
+
 class SteamDetector(QObject):
     steam_status_changed = Signal(bool)
     game_status_changed = Signal(bool)
@@ -27,13 +28,18 @@ class SteamDetector(QObject):
 
         if steam_running != self.is_steam_running:
             self.is_steam_running = steam_running
-            logger.info(f"Steam status changed: {'Running' if steam_running else 'Stopped'}")
+            logger.info(
+                f"Steam status changed: {'Running' if steam_running else 'Stopped'}"
+            )
             self.steam_status_changed.emit(steam_running)
 
-        if game_active != self.is_game_active or steam_input_active != self.steam_input_active:
+        if (game_active != self.is_game_active or
+                steam_input_active != self.steam_input_active):
             self.is_game_active = game_active
             self.steam_input_active = steam_input_active
-            logger.info(f"Game activity: {game_active}, Steam Input: {steam_input_active}")
+            logger.info(
+                f"Game activity: {game_active}, Steam Input: {steam_input_active}"
+            )
             self.game_status_changed.emit(game_active and steam_input_active)
 
     def _is_steam_process_running(self):
@@ -42,8 +48,8 @@ class SteamDetector(QObject):
             return True
         except subprocess.CalledProcessError:
             return False
-        except Exception as e:
-            logger.error(f"Error checking steam process: {e}")
+        except Exception as err:
+            logger.error(f"Error checking steam process: {err}")
             return False
 
     def _is_steam_input_engaged(self):
@@ -71,8 +77,8 @@ class SteamDetector(QObject):
                 if not is_pnp:
                     logger.debug(f"Detected external virtual controller: {name}")
                     return True
-        except Exception as e:
-            logger.error(f"Error checking for Steam Input device: {e}")
+        except Exception as err:
+            logger.error(f"Error checking for Steam Input device: {err}")
         return False
 
     def _is_any_game_running(self):
@@ -94,14 +100,14 @@ class SteamDetector(QObject):
                         if b'SteamAppId=' in env_data:
                             return True
 
-                    with open(f'/proc/{pid}/maps', 'r') as f:
+                    with open(f'/proc/{pid}/maps', 'r', encoding="utf-8") as f:
                         for line in f:
                             if 'gameoverlayrenderer.so' in line:
                                 return True
                 except (PermissionError, FileNotFoundError):
                     continue
-        except Exception as e:
-            logger.error(f"Error scanning /proc for games: {e}")
+        except Exception as err:
+            logger.error(f"Error scanning /proc for games: {err}")
 
         return False
 

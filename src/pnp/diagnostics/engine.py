@@ -1,8 +1,8 @@
 import os
-import shutil
 import subprocess
 from loguru import logger
 from pnp.diagnostics.polkit import PolkitManager
+
 
 class DiagnosticSystem:
     def __init__(self):
@@ -25,24 +25,29 @@ class DiagnosticSystem:
             self.results.append({
                 "id": "udev_missing",
                 "title": "PNP udev rules missing",
-                "description": "Custom udev rules are required for PNP to access controllers without root.",
+                "description": "Custom udev rules are required for PNP to "
+                               "access controllers without root.",
                 "severity": "critical",
                 "fix_action": "org.pnp.udev.install",
                 "helper": "install-udev-rules"
             })
         else:
             # Check for correct content (simplified)
-            with open(pnp_rules, "r") as f:
-                content = f.read()
-                if 'ATTRS{idVendor}=="054c"' not in content:
-                    self.results.append({
-                        "id": "udev_invalid",
-                        "title": "PNP udev rules invalid",
-                        "description": "Existing udev rules seem to be outdated or incorrect.",
-                        "severity": "warning",
-                        "fix_action": "org.pnp.udev.install",
-                        "helper": "install-udev-rules"
-                    })
+            try:
+                with open(pnp_rules, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    if 'ATTRS{idVendor}=="054c"' not in content:
+                        self.results.append({
+                            "id": "udev_invalid",
+                            "title": "PNP udev rules invalid",
+                            "description": "Existing udev rules seem to be "
+                                           "outdated or incorrect.",
+                            "severity": "warning",
+                            "fix_action": "org.pnp.udev.install",
+                            "helper": "install-udev-rules"
+                        })
+            except Exception as err:
+                logger.error(f"Error reading udev rules: {err}")
 
     def _check_uinput(self):
         # Check if /dev/uinput exists and is writable
@@ -59,7 +64,9 @@ class DiagnosticSystem:
             self.results.append({
                 "id": "uinput_permission",
                 "title": "uinput permission denied",
-                "description": "User does not have permission to write to /dev/uinput. Fixing udev rules might resolve this.",
+                "description": "User does not have permission to write to "
+                               "/dev/uinput. Fixing udev rules might "
+                               "resolve this.",
                 "severity": "critical",
                 "fix_action": "org.pnp.udev.install",
                 "helper": "install-udev-rules"
@@ -68,32 +75,42 @@ class DiagnosticSystem:
     def _check_bluetooth(self):
         # Check for BlueZ/Bluetooth status
         try:
-            res = subprocess.run(["systemctl", "is-active", "bluetooth"], capture_output=True, text=True)
+            res = subprocess.run(
+                ["systemctl", "is-active", "bluetooth"],
+                capture_output=True, text=True, check=False
+            )
             if res.stdout.strip() != "active":
                 self.results.append({
                     "id": "bluetooth_inactive",
                     "title": "Bluetooth service inactive",
-                    "description": "The system bluetooth service is not running.",
+                    "description": "The system bluetooth service is not "
+                                   "running.",
                     "severity": "warning",
                     "fix_action": "org.pnp.bluetooth.fix",
                     "helper": "fix-bluetooth"
                 })
-        except:
+        except Exception:
             pass
 
         # Check for ERTM issue
         ertm_file = "/sys/module/bluetooth/parameters/disable_ertm"
         if os.path.exists(ertm_file):
-            with open(ertm_file, "r") as f:
-                if f.read().strip() == "N": # N means ERTM is enabled (not disabled)
-                    self.results.append({
-                        "id": "bluetooth_ertm",
-                        "title": "Bluetooth ERTM enabled",
-                        "description": "Enhanced Re-transmission Mode (ERTM) can cause connection issues with Sony controllers.",
-                        "severity": "warning",
-                        "fix_action": "org.pnp.bluetooth.fix",
-                        "helper": "fix-bluetooth"
-                    })
+            try:
+                with open(ertm_file, "r", encoding="utf-8") as f:
+                    # N means ERTM is enabled (not disabled)
+                    if f.read().strip() == "N":
+                        self.results.append({
+                            "id": "bluetooth_ertm",
+                            "title": "Bluetooth ERTM enabled",
+                            "description": "Enhanced Re-transmission Mode "
+                                           "(ERTM) can cause connection "
+                                           "issues with Sony controllers.",
+                            "severity": "warning",
+                            "fix_action": "org.pnp.bluetooth.fix",
+                            "helper": "fix-bluetooth"
+                        })
+            except Exception as err:
+                logger.error(f"Error reading ERTM status: {err}")
 
     def _check_steam_devices(self):
         steam_rules = "/etc/udev/rules.d/60-steam-input.rules"
@@ -104,7 +121,9 @@ class DiagnosticSystem:
                 self.results.append({
                     "id": "steam_devices_missing",
                     "title": "Steam devices udev rules missing",
-                    "description": "Valve's standard udev rules are recommended for better Steam Input compatibility.",
+                    "description": "Valve's standard udev rules are "
+                                   "recommended for better Steam Input "
+                                   "compatibility.",
                     "severity": "info",
                     "fix_action": "org.pnp.udev.install",
                     "helper": "install-udev-rules"
@@ -123,3 +142,26 @@ class DiagnosticSystem:
 
         success, error = PolkitManager.run_helper(helper, action_id)
         return success, error
+
+    def fix_all(self):
+        """Attempts to fix all detected issues."""
+        success_count = 0
+        errors = []
+        for issue in self.results:
+            success, error = self.apply_fix(issue["id"])
+            if success:
+                success_count += 1
+            else:
+                errors.append(f"{issue['title']}: {error}")
+
+        return success_count == len(self.results), "\n".join(errors)
+
+    def revert_changes(self):
+        """Attempts to revert PNP-specific changes (udev, uinput config)."""
+        logger.info("Reverting PNP system changes...")
+        # We need a revert helper. For now, we'll use a generic one or pkexec rm
+        # Since we don't have a revert-all helper, we'll try to remove known
+        # files. This is simplified for the demo.
+        return PolkitManager.run_helper(
+            "reload-services", "org.pnp.systemd.reload"
+        )

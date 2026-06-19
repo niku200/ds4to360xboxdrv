@@ -18,6 +18,7 @@
 - **🔥 Non-Steam Game Power**: Use the `pnp-steam-run` wrapper to force Steam Input features (Gyro, Touchpad, Community Layouts) on *any* standalone executable or emulator.
 - **🔋 Battery Tracking**: Real-time monitoring of controller battery levels and charging status directly in the GUI.
 - **🔍 Visual Input Tester**: A beautiful, real-time visualizer to verify your button mappings and stick accuracy at 60Hz.
+- **🛡️ Diagnostic System**: Built-in system health checks with one-click automated recovery via Polkit.
 - **📜 Professional Logging**: Integrated with **Loguru** for real-time, color-coded logging in both terminal and GUI.
 - **⚙️ XDG & JSONC**: Fully compliant with Linux filesystem standards. Easy-to-edit configuration using JSON with comments (JSONC).
 - **🛠️ Systemd Integration**: Runs as a background service so your controllers "just work" the moment you plug them in or connect via Bluetooth.

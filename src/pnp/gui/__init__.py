@@ -1,12 +1,12 @@
 import sys
 import os
-from PySide6.QtGui import QGuiApplication
+import re
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QApplication
 from loguru import logger
 from pnp.gui.backend import Backend
 from pnp.gui.tray import TrayManager
+
 
 class LogSink:
     def __init__(self, backend):
@@ -14,10 +14,10 @@ class LogSink:
 
     def write(self, message):
         # Remove ANSI color codes if any
-        import re
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
         clean_msg = ansi_escape.sub('', message)
         self.backend.appendLog(clean_msg)
+
 
 def main():
     # Ensure src directory is in sys.path
@@ -40,16 +40,27 @@ def main():
 
     # Tray Management
     tray = TrayManager(app)
-    tray.show_window_requested.connect(lambda: engine.rootObjects()[0].show())
+    tray.show_window_requested.connect(
+        lambda: engine.rootObjects()[0].show() if engine.rootObjects() else None
+    )
     tray.quit_requested.connect(app.quit)
     tray.start()
 
     # Configure Loguru
-    logger.remove() # Remove default handler
-    logger.add(sys.stderr, colorize=True, format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>")
+    logger.remove()  # Remove default handler
+    logger.add(
+        sys.stderr,
+        colorize=True,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
+               "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> "
+               "- <level>{message}</level>"
+    )
 
     log_sink = LogSink(backend)
-    logger.add(log_sink.write, format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}\n")
+    logger.add(
+        log_sink.write,
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}\n"
+    )
 
     qml_file = os.path.join(os.path.dirname(__file__), "qml", "main.qml")
     engine.load(qml_file)
@@ -58,6 +69,7 @@ def main():
         sys.exit(-1)
 
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()
