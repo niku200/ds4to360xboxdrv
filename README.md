@@ -56,12 +56,20 @@ sudo dnf install evsieve python3-evdev python3-pyudev python3-requests
 sudo dnf install ./pnp-5.2.0.rpm
 ```
 
-### 3. udev Rules
-To ensure the service can manage controllers without root permissions, install the provided udev rules:
-```bash
-sudo cp 99-pnp.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
+### 3. Permissions & udev Rules
+To ensure PNP can manage controllers and create virtual devices without root permissions:
+
+1. **Add your user to the `input` group**:
+   ```bash
+   sudo usermod -aG input $USER
+   ```
+   *Note: You may need to log out and back in for this to take effect.*
+
+2. **Install udev rules**:
+   ```bash
+   sudo cp 99-pnp.rules /etc/udev/rules.d/
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   ```
 
 ---
 

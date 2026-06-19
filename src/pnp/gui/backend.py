@@ -33,6 +33,12 @@ class TesterWorker(QObject):
 
     def start(self):
         try:
+            if "js" in self.path:
+                # We prefer event devices for evdev
+                event_path = self.path.replace("js", "event")
+                if os.path.exists(event_path):
+                    self.path = event_path
+
             self.device = evdev.InputDevice(self.path)
             self.name = self.device.name
             self.is_virtual = (
@@ -40,6 +46,7 @@ class TesterWorker(QObject):
             )
             self.notifier = QSocketNotifier(self.device.fd, QSocketNotifier.Read)
             self.notifier.activated.connect(self._read_events)
+            logger.debug(f"TesterWorker monitoring {self.path} ({self.name})")
         except Exception as err:
             logger.error(f"TesterWorker failed to open {self.path}: {err}")
 

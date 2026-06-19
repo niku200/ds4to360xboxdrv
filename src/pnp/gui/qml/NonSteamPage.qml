@@ -174,4 +174,36 @@ Page {
         }
     }
 
+    Dialog {
+        id: settingsDialog
+        title: "Non-Steam Settings"
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        anchors.centerIn: parent
+
+        ColumnLayout {
+            spacing: 15
+            Label { text: "Paths Configuration"; font.bold: true }
+
+            TextField {
+                id: heroicPath
+                Layout.fillWidth: true
+                placeholderText: "Heroic Games Directory"
+                text: backend.config.heroic_games_dir || "~/Games/Heroic"
+            }
+
+            TextField {
+                id: hydraPath
+                Layout.fillWidth: true
+                placeholderText: "Hydra Games Directory"
+                text: backend.config.hydra_games_dir || "~/Games/Hydra"
+            }
+        }
+
+        onAccepted: {
+            backend.updateConfig("heroic_games_dir", heroicPath.text)
+            backend.updateConfig("hydra_games_dir", hydraPath.text)
+            backend.saveConfig()
+            backend.refreshNonSteamGames()
+        }
+    }
 }

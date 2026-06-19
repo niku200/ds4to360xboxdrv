@@ -50,6 +50,7 @@ exclude = [
 ]
 [tool.hatch.build.targets.wheel]
 packages = ["src/pnp"]
+artifacts = ["src/pnp/helpers/*"]
 [dependency-groups]
 dev = [
     "flake8>=7.3.0",

@@ -77,11 +77,11 @@ Page {
 
                             // D-Pad
                             Item { width: 32; height: 32 }
-                            TesterButton { text: "U"; active: modelData.buttons[706] }
+                            TesterButton { text: "U"; active: modelData.buttons[706] || false }
                             Item { width: 32; height: 32 }
-                            TesterButton { text: "L"; active: modelData.buttons[704] }
-                            TesterButton { text: "D"; active: modelData.buttons[707] }
-                            TesterButton { text: "R"; active: modelData.buttons[705] }
+                            TesterButton { text: "L"; active: modelData.buttons[704] || false }
+                            TesterButton { text: "D"; active: modelData.buttons[707] || false }
+                            TesterButton { text: "R"; active: modelData.buttons[705] || false }
                         }
 
                         Grid {
@@ -89,11 +89,11 @@ Page {
                             spacing: 10
                             // Action Buttons
                             Item { width: 32; height: 32 }
-                            TesterButton { text: "Y"; active: modelData.buttons[308]; accentColor: "#F4D03F" }
+                            TesterButton { text: "Y"; active: (modelData.buttons[308] || false); accentColor: "#F4D03F" }
                             Item { width: 32; height: 32 }
-                            TesterButton { text: "X"; active: modelData.buttons[307]; accentColor: "#3498DB" }
-                            TesterButton { text: "A"; active: modelData.buttons[304]; accentColor: "#2ECC71" }
-                            TesterButton { text: "B"; active: modelData.buttons[305]; accentColor: "#E74C3C" }
+                            TesterButton { text: "X"; active: (modelData.buttons[307] || false); accentColor: "#3498DB" }
+                            TesterButton { text: "A"; active: (modelData.buttons[304] || false); accentColor: "#2ECC71" }
+                            TesterButton { text: "B"; active: (modelData.buttons[305] || false); accentColor: "#E74C3C" }
                         }
                     }
 

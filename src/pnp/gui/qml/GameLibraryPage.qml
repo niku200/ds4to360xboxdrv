@@ -42,7 +42,7 @@ Page {
             clip: true
 
             delegate: Frame {
-                width: parent.width
+                width: parent ? parent.width : 0
                 padding: 15
 
                 background: Rectangle {

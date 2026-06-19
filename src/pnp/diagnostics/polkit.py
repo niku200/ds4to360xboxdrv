@@ -47,14 +47,25 @@ class PolkitManager:
     @staticmethod
     def run_helper(helper_name, action_id):
         """Runs a privileged helper script via pkexec."""
+        # Try system path first
         helper_path = f"/usr/lib/pnp/helpers/{helper_name}"
 
         if not os.path.exists(helper_path):
-            logger.warning(
-                f"Helper not found at {helper_path}. Expecting system installation."
-            )
+            # Fallback to source tree path
+            src_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            helper_path = os.path.join(src_dir, "pnp", "helpers", helper_name)
 
-        logger.info(f"Executing privileged helper: {helper_name} via pkexec")
+            if not os.path.exists(helper_path):
+                # Another attempt, absolute relative to script
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                helper_path = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "src", "pnp", "helpers", helper_name)
+
+        if not os.path.exists(helper_path):
+            error_msg = f"Helper {helper_name} not found at any known location."
+            logger.error(error_msg)
+            return False, error_msg
+
+        logger.info(f"Executing privileged helper: {helper_path} via pkexec")
 
         try:
             result = subprocess.run(
