@@ -46,6 +46,7 @@ Page {
 
         ListView {
             id: diagList
+            property string placeholderText: "No issues detected. Your system is correctly configured for PNP."
             Layout.fillWidth: true
             Layout.fillHeight: true
             model: backend.diagnosticIssues
@@ -100,7 +101,6 @@ Page {
                 }
             }
 
-            placeholderText: "No issues detected. Your system is correctly configured for PNP."
             Label {
                 anchors.centerIn: parent
                 visible: diagList.count === 0
