@@ -24,6 +24,7 @@ ApplicationWindow {
             Layout.fillHeight: true
 
             MonitorPage {}
+            GameLibraryPage {}
             TesterPage {}
             DiagnosticPage {}
             SettingsPage {}
@@ -37,6 +38,9 @@ ApplicationWindow {
 
             TabButton {
                 text: "📺 Monitor"
+            }
+            TabButton {
+                text: "🎮 Library"
             }
             TabButton {
                 text: "🎮 Tester"

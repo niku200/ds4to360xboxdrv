@@ -9,7 +9,9 @@ from loguru import logger
 
 from pnp.core.manager import ControllerManager
 from pnp.services.config_manager import ConfigManager
+from pnp.services.profile_downloader import ProfileDownloader
 from pnp.diagnostics.engine import DiagnosticSystem
+from pnp.helpers.steam_library import get_steam_games
 
 QML_IMPORT_NAME = "ir.pakrohk.pnp"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -82,6 +84,7 @@ class TesterWorker(QObject):
 class Backend(QObject):
     controllersChanged = Signal()
     testerDevicesChanged = Signal()
+    steamGamesChanged = Signal()
     configChanged = Signal()
     logsChanged = Signal()
     serviceActiveChanged = Signal()
@@ -102,6 +105,8 @@ class Backend(QObject):
         self._is_observer = True
         self._diag_system = DiagnosticSystem()
         self._diag_issues = []
+        self._profile_downloader = ProfileDownloader()
+        self._steam_games = []
 
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
@@ -196,6 +201,48 @@ class Backend(QObject):
     @Property(list, notify=testerDevicesChanged)
     def testerDevices(self):
         return [w.to_dict() for w in self._tester_workers.values()]
+
+    @Property(list, notify=steamGamesChanged)
+    def steamGames(self):
+        return self._steam_games
+
+    @Slot()
+    def refreshSteamGames(self):
+        logger.info("Refreshing Steam library...")
+        self._steam_games = get_steam_games()
+        # Add 'applied' status
+        for game in self._steam_games:
+            game['applied'] = self._is_profile_applied(game['appid'])
+        self.steamGamesChanged.emit()
+
+    def _is_profile_applied(self, appid):
+        user_dirs = [
+            d for d in os.listdir(self._profile_downloader.userdata_path)
+            if d.isdigit()
+        ]
+        for user_id in user_dirs:
+            target_file = os.path.join(
+                self._profile_downloader.userdata_path, user_id,
+                "controller_configs", "apps", appid, "pnp_autoset.vdf"
+            )
+            if os.path.exists(target_file):
+                return True
+        return False
+
+    @Slot(str)
+    def downloadGameProfile(self, appid):
+        logger.info(f"Downloading profile for AppID {appid}...")
+        config = self._profile_downloader.get_best_config(appid)
+        if config:
+            success = self._profile_downloader.apply_config(appid, config)
+            if success:
+                self._profile_downloader.trigger_steam_reload()
+                self.fixCompleted.emit(True, f"Profile applied for {appid}")
+                self.refreshSteamGames()
+            else:
+                self.fixCompleted.emit(False, "Failed to apply config.")
+        else:
+            self.fixCompleted.emit(False, "No suitable config found.")
 
     def _scan_tester_devices(self):
         import pyudev
