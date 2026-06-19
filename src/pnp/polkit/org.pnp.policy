@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>PNP Project</vendor>
+  <vendor_url>https://github.com/Pakrohk/pnp</vendor_url>
+
+  <action id="org.pnp.udev.install">
+    <description>Install udev rules for PNP</description>
+    <message>Authentication is required to install udev rules.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/pnp/helpers/install-udev-rules</annotate>
+  </action>
+
+  <action id="org.pnp.uinput.load">
+    <description>Load uinput kernel module</description>
+    <message>Authentication is required to load the uinput kernel module.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/pnp/helpers/load-uinput</annotate>
+  </action>
+
+  <action id="org.pnp.bluetooth.fix">
+    <description>Fix Bluetooth configuration issues</description>
+    <message>Authentication is required to fix Bluetooth configuration.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/pnp/helpers/fix-bluetooth</annotate>
+  </action>
+
+  <action id="org.pnp.systemd.reload">
+    <description>Reload systemd and udev</description>
+    <message>Authentication is required to reload system services.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/pnp/helpers/reload-services</annotate>
+  </action>
+
+</policyconfig>

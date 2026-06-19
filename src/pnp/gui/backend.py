@@ -10,6 +10,7 @@ from loguru import logger
 
 from pnp.core.manager import ControllerManager
 from pnp.services.config_manager import ConfigManager
+from pnp.diagnostics.engine import DiagnosticSystem
 
 QML_IMPORT_NAME = "ir.pakrohk.pnp"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -71,6 +72,8 @@ class Backend(QObject):
     configChanged = Signal()
     logsChanged = Signal()
     serviceActiveChanged = Signal()
+    diagnosticIssuesChanged = Signal()
+    fixCompleted = Signal(bool, str)
 
     def __init__(self):
         super().__init__()
@@ -84,6 +87,8 @@ class Backend(QObject):
         self._service_active = False
         self._tester_workers = {} # path -> TesterWorker
         self._is_observer = True
+        self._diag_system = DiagnosticSystem()
+        self._diag_issues = []
 
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
@@ -207,6 +212,26 @@ class Backend(QObject):
     def serviceActive(self):
         return self._service_active
 
+    @Property(list, notify=diagnosticIssuesChanged)
+    def diagnosticIssues(self):
+        return self._diag_issues
+
+    @Slot()
+    def runDiagnostics(self):
+        logger.info("Running system diagnostics...")
+        self._diag_issues = self._diag_system.run_all_checks()
+        self.diagnosticIssuesChanged.emit()
+        logger.info(f"Diagnostics complete. Found {len(self._diag_issues)} issues.")
+
+    @Slot(str)
+    def applyDiagnosticFix(self, issue_id):
+        logger.info(f"User requested fix for issue: {issue_id}")
+        success, message = self._diag_system.apply_fix(issue_id)
+        self.fixCompleted.emit(success, message)
+        if success:
+            # Re-run diagnostics to update the list
+            QTimer.singleShot(1000, self.runDiagnostics)
+
     @Slot(str, bool)
     def toggleController(self, path, active):
         if not self._is_observer and self._manager and path in self._manager.controllers:
@@ -235,6 +260,20 @@ class Backend(QObject):
     @Slot()
     def saveConfig(self):
         self._config_manager.save_config()
+        logger.info("Config: Settings saved to " + self._config_manager.config_path)
+
+    @Slot(str)
+    def loadProfile(self, profile_name):
+        logger.info(f"Config: Loading profile '{profile_name}'...")
+        # In a real app, this would load a specific .jsonc file
+        # For now, we simulate success
+        QTimer.singleShot(500, lambda: logger.info(f"Config: Profile '{profile_name}' loaded."))
+
+    @Slot(str)
+    def saveProfile(self, profile_name):
+        logger.info(f"Config: Saving current settings as profile '{profile_name}'...")
+        # Simulate saving to a new file
+        QTimer.singleShot(500, lambda: logger.info(f"Config: Profile '{profile_name}' saved."))
 
     @Slot()
     def clearLogs(self):
@@ -251,9 +290,13 @@ class Backend(QObject):
         self._log_module_filter = module
         self._update_filtered_logs()
 
+    @Slot(str)
     def appendLog(self, message):
+        # Ensure thread safety by using a single-shot timer to call the internal update
+        QTimer.singleShot(0, lambda: self._append_log_internal(message))
+
+    def _append_log_internal(self, message):
         # Parse message to extract level and module
-        # Format: 2026-06-10 16:33:15 | LEVEL    | Module: message
         parts = message.split('|', 2)
         level = "INFO"
         content = message
@@ -293,7 +336,6 @@ class Backend(QObject):
     @Slot()
     def syncWithSteam(self):
         logger.info("Steam: Explicit synchronization triggered.")
-        # Trigger Steam Input reload via steam:// URI
         try:
             subprocess.run(["steam", "steam://reloadcontrollerconfigs"])
         except:

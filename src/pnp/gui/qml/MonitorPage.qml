@@ -81,7 +81,6 @@ Page {
                     }
                 }
 
-                // Key Mapping Visualization
                 Frame {
                     Layout.fillWidth: true
                     visible: modelData.isActive
@@ -131,6 +130,7 @@ Page {
             spacing: 10
 
             ComboBox {
+                id: profileCombo
                 model: ["Default Profile", "Competitive", "Racing", "Fighting"]
                 Layout.fillWidth: true
             }
@@ -142,6 +142,7 @@ Page {
 
             Button {
                 text: "📂 Load Profile"
+                onClicked: backend.loadProfile(profileCombo.currentText)
             }
         }
 
@@ -150,13 +151,20 @@ Page {
             spacing: 10
 
             TextField {
+                id: profileNameField
                 placeholderText: "Profile Name"
                 Layout.fillWidth: true
             }
 
             Button {
                 text: "💾 Save Profile"
-                onClicked: backend.saveConfig()
+                onClicked: {
+                    if (profileNameField.text !== "") {
+                        backend.saveProfile(profileNameField.text)
+                    } else {
+                        backend.saveConfig()
+                    }
+                }
             }
         }
     }

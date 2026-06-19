@@ -25,6 +25,7 @@ ApplicationWindow {
 
             MonitorPage {}
             TesterPage {}
+            DiagnosticPage {}
             SettingsPage {}
             LogPage {}
         }
@@ -41,11 +42,53 @@ ApplicationWindow {
                 text: "🎮 Tester"
             }
             TabButton {
+                text: "🔍 Diags"
+            }
+            TabButton {
                 text: "⚙️ Settings"
             }
             TabButton {
                 text: "📜 Logs"
             }
+        }
+    }
+
+    // Simple Toast Component
+    Item {
+        id: toast
+        property string message: ""
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 80
+        width: toastLabel.width + 40
+        height: 40
+        opacity: 0
+        visible: opacity > 0
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#333"
+            radius: 20
+            border.color: "#555"
+        }
+
+        Label {
+            id: toastLabel
+            anchors.centerIn: parent
+            text: toast.message
+            color: "white"
+        }
+
+        function show(msg) {
+            message = msg
+            toastAnim.restart()
+        }
+
+        SequentialAnimation on opacity {
+            id: toastAnim
+            NumberAnimation { to: 1; duration: 200 }
+            PauseAnimation { duration: 3000 }
+            NumberAnimation { to: 0; duration: 500 }
         }
     }
 }

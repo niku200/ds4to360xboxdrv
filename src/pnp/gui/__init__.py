@@ -2,9 +2,11 @@ import sys
 import os
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Slot
+from PySide6.QtWidgets import QApplication
 from loguru import logger
 from pnp.gui.backend import Backend
+from pnp.gui.tray import TrayManager
 
 class LogSink:
     def __init__(self, backend):
@@ -24,7 +26,9 @@ def main():
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
 
-    app = QGuiApplication(sys.argv)
+    # Use QApplication instead of QGuiApplication for QSystemTrayIcon support
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("PNP")
     app.setOrganizationName("pakrohk")
     app.setApplicationVersion("5.2.0")
@@ -33,6 +37,12 @@ def main():
 
     backend = Backend()
     engine.rootContext().setContextProperty("backend", backend)
+
+    # Tray Management
+    tray = TrayManager(app)
+    tray.show_window_requested.connect(lambda: engine.rootObjects()[0].show())
+    tray.quit_requested.connect(app.quit)
+    tray.start()
 
     # Configure Loguru
     logger.remove() # Remove default handler
