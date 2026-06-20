@@ -15,6 +15,7 @@ class DiagnosticSystem:
         self._check_udev_rules()
         self._check_uinput()
         self._check_bluetooth()
+        self._check_bluetooth_detailed()
         self._check_steam_devices()
 
         return self.results
@@ -111,6 +112,73 @@ class DiagnosticSystem:
                         })
             except Exception as err:
                 logger.error(f"Error reading ERTM status: {err}")
+
+    def _check_bluetooth_detailed(self):
+        """Performs deeper Bluetooth diagnostics (modules, firmware, service)."""
+        # 0. Check service status
+        try:
+            res = subprocess.run(["systemctl", "status", "bluetooth"], capture_output=True, text=True, check=False)
+            if "failed" in res.stdout.lower() or "error" in res.stdout.lower():
+                self.results.append({
+                    "id": "bluetooth_service_failed",
+                    "title": "Bluetooth service failed",
+                    "description": "The system bluetooth service is in a failed state.",
+                    "severity": "critical",
+                    "fix_action": "org.pnp.bluetooth.fix",
+                    "helper": "fix-bluetooth"
+                })
+        except Exception:
+            pass
+
+        # 1. Check modules
+        modules = ['btusb', 'hidp', 'hid_generic']
+        missing_modules = []
+        for mod in modules:
+            try:
+                res = subprocess.run(f"lsmod | grep {mod}", shell=True, capture_output=True)
+                if res.returncode != 0:
+                    missing_modules.append(mod)
+            except Exception:
+                pass
+
+        if missing_modules:
+            self.results.append({
+                "id": "bluetooth_modules_missing",
+                "title": "Bluetooth modules missing",
+                "description": f"The following modules are not loaded: {', '.join(missing_modules)}. "
+                               "This may prevent HID controllers from connecting.",
+                "severity": "warning",
+                "fix_action": "org.pnp.bluetooth.fix",
+                "helper": "fix-bluetooth"
+            })
+
+        # New: Explicit HID module check
+        if 'hidp' in missing_modules:
+            self.results.append({
+                "id": "bluetooth_hid_module",
+                "title": "Bluetooth HID protocol (hidp) missing",
+                "description": "The 'hidp' kernel module is critical for Bluetooth controllers. "
+                               "Without it, SDP records cannot be parsed.",
+                "severity": "critical",
+                "fix_action": "org.pnp.bluetooth.fix",
+                "helper": "fix-bluetooth"
+            })
+
+        # 2. Check dmesg for firmware issues
+        try:
+            res = subprocess.run("dmesg | grep -i bluetooth | tail -n 20", shell=True, capture_output=True, text=True)
+            if "firmware" in res.stdout.lower() and ("error" in res.stdout.lower() or "failed" in res.stdout.lower()):
+                self.results.append({
+                    "id": "bluetooth_firmware_error",
+                    "title": "Bluetooth firmware error detected",
+                    "description": "System logs indicate a Bluetooth firmware issue. "
+                                   "Try 'Fix All' to reload modules, or check for missing firmware packages.",
+                    "severity": "warning",
+                    "fix_action": "org.pnp.bluetooth.fix",
+                    "helper": "fix-bluetooth"
+                })
+        except Exception:
+            pass
 
     def _check_steam_devices(self):
         steam_rules = "/etc/udev/rules.d/60-steam-input.rules"

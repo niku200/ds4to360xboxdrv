@@ -9,7 +9,13 @@ from loguru import logger
 
 from pnp.core.manager import ControllerManager
 from pnp.services.config_manager import ConfigManager
+from pnp.services.profile_downloader import ProfileDownloader
 from pnp.diagnostics.engine import DiagnosticSystem
+from PySide6.QtWidgets import QFileDialog
+from PySide6.QtCore import QUrl, QStandardPaths
+from pnp.helpers.steam_library import get_steam_games
+from pnp.services.nonsteam_manager import NonSteamManager
+from pnp.services.bluetooth_scanner import BluetoothScanner
 
 QML_IMPORT_NAME = "ir.pakrohk.pnp"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -30,6 +36,12 @@ class TesterWorker(QObject):
 
     def start(self):
         try:
+            if "js" in self.path:
+                # We prefer event devices for evdev
+                event_path = self.path.replace("js", "event")
+                if os.path.exists(event_path):
+                    self.path = event_path
+
             self.device = evdev.InputDevice(self.path)
             self.name = self.device.name
             self.is_virtual = (
@@ -37,6 +49,7 @@ class TesterWorker(QObject):
             )
             self.notifier = QSocketNotifier(self.device.fd, QSocketNotifier.Read)
             self.notifier.activated.connect(self._read_events)
+            logger.debug(f"TesterWorker monitoring {self.path} ({self.name})")
         except Exception as err:
             logger.error(f"TesterWorker failed to open {self.path}: {err}")
 
@@ -82,11 +95,16 @@ class TesterWorker(QObject):
 class Backend(QObject):
     controllersChanged = Signal()
     testerDevicesChanged = Signal()
+    steamGamesChanged = Signal()
+    nonSteamGamesChanged = Signal()
     configChanged = Signal()
     logsChanged = Signal()
     serviceActiveChanged = Signal()
     diagnosticIssuesChanged = Signal()
     fixCompleted = Signal(bool, str)
+    directorySelected = Signal(str)
+    bluetoothLogReceived = Signal(str, str)
+    bluetoothScanFinished = Signal(list)
 
     def __init__(self):
         super().__init__()
@@ -102,6 +120,13 @@ class Backend(QObject):
         self._is_observer = True
         self._diag_system = DiagnosticSystem()
         self._diag_issues = []
+        self._profile_downloader = ProfileDownloader()
+        self._steam_games = []
+        self._nonsteam_manager = NonSteamManager()
+        self._non_steam_games = []
+        self._bluetooth_scanner = BluetoothScanner()
+        self._bluetooth_scanner.logReceived.connect(self.bluetoothLogReceived)
+        self._bluetooth_scanner.scanFinished.connect(self._on_bluetooth_scan_finished)
 
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
@@ -196,6 +221,153 @@ class Backend(QObject):
     @Property(list, notify=testerDevicesChanged)
     def testerDevices(self):
         return [w.to_dict() for w in self._tester_workers.values()]
+
+    @Property(list, notify=steamGamesChanged)
+    def steamGames(self):
+        return self._steam_games
+
+    @Property(list, notify=nonSteamGamesChanged)
+    def nonSteamGames(self):
+        return self._non_steam_games
+
+    @Slot()
+    def refreshNonSteamGames(self):
+        # Run scan in a thread to avoid freezing UI
+        def run_scan():
+            self._non_steam_games = self._nonsteam_manager.do_scan()
+            self.nonSteamGamesChanged.emit()
+
+        threading.Thread(target=run_scan, daemon=True).start()
+
+    @Slot(dict)
+    def addNonSteamGame(self, game):
+        def run_action():
+            success, message = self._nonsteam_manager.add_to_steam(game)
+            self.fixCompleted.emit(success, message)
+            if success:
+                self.refreshNonSteamGames()
+
+        threading.Thread(target=run_action, daemon=True).start()
+
+    @Slot(str)
+    def removeNonSteamGame(self, game_title):
+        def run_action():
+            success, message = self._nonsteam_manager.remove_from_steam(game_title)
+            self.fixCompleted.emit(success, message)
+            if success:
+                self.refreshNonSteamGames()
+
+        threading.Thread(target=run_action, daemon=True).start()
+
+    @Slot()
+    def selectGamesDirectory(self):
+        # We need a parent widget for QFileDialog, but Backend is a QObject.
+        # However, we can use None as parent.
+        directory = QFileDialog.getExistingDirectory(
+            None,
+            "Select Games Directory",
+            QStandardPaths.standardLocations(QStandardPaths.HomeLocation)[0],
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if directory:
+            self.directorySelected.emit(directory)
+            self.scanDirectory(directory)
+
+    @Slot(str)
+    def scanDirectory(self, path):
+        def run_scan():
+            self._non_steam_games = self._nonsteam_manager.do_scan(manual_path=path)
+            self.nonSteamGamesChanged.emit()
+        threading.Thread(target=run_scan, daemon=True).start()
+
+    @Slot()
+    def startBluetoothMonitoring(self):
+        self._bluetooth_scanner.start_monitoring()
+
+    @Slot()
+    def stopBluetoothMonitoring(self):
+        self._bluetooth_scanner.stop_monitoring()
+
+    @Slot()
+    def scanBluetoothDevices(self):
+        self._bluetooth_scanner.scan_devices()
+
+    def _on_bluetooth_scan_finished(self, devices_output):
+        devices = []
+        for line in devices_output.splitlines():
+            parts = line.split(' ', 2)
+            if len(parts) >= 3:
+                devices.append({
+                    "mac": parts[1],
+                    "name": parts[2]
+                })
+        self.bluetoothScanFinished.emit(devices)
+
+    @Slot(str)
+    def pairBluetoothDevice(self, mac):
+        def run():
+            success = self._bluetooth_scanner.pair_device(mac)
+            if not success:
+                # If SM failed, check if we need to offer cache clear
+                # The scanner logs SM [FAIL] with hints
+                pass
+            self.fixCompleted.emit(success, f"Pairing {'successful' if success else 'failed'}")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot(str)
+    def clearBluetoothCache(self, mac):
+        logger.info(f"User requested cache clear for {mac}")
+        from pnp.diagnostics.polkit import PolkitManager
+        def run():
+            # Use fix-bluetooth helper with MAC argument for targeted cleanup
+            success, error = PolkitManager.run_helper("fix-bluetooth", "org.pnp.bluetooth.fix", args=[mac])
+            self.fixCompleted.emit(success, error or f"Cache cleared for {mac}. Please retry pairing.")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot(str)
+    def connectBluetoothDevice(self, mac):
+        def run():
+            success = self._bluetooth_scanner.connect_device(mac)
+            self.fixCompleted.emit(success, f"Connection {'successful' if success else 'failed'}")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot()
+    def refreshSteamGames(self):
+        logger.info("Refreshing Steam library...")
+        self._steam_games = get_steam_games()
+        # Add 'applied' status
+        for game in self._steam_games:
+            game['applied'] = self._is_profile_applied(game['appid'])
+        self.steamGamesChanged.emit()
+
+    def _is_profile_applied(self, appid):
+        user_dirs = [
+            d for d in os.listdir(self._profile_downloader.userdata_path)
+            if d.isdigit()
+        ]
+        for user_id in user_dirs:
+            target_file = os.path.join(
+                self._profile_downloader.userdata_path, user_id,
+                "controller_configs", "apps", appid, "pnp_autoset.vdf"
+            )
+            if os.path.exists(target_file):
+                return True
+        return False
+
+    @Slot(str)
+    def downloadGameProfile(self, appid):
+        logger.info(f"Downloading profile for AppID {appid}...")
+        config = self._profile_downloader.get_best_config(appid)
+        if config:
+            success = self._profile_downloader.apply_config(appid, config)
+            if success:
+                self._profile_downloader.trigger_steam_reload()
+                self.fixCompleted.emit(True, f"Profile applied for {appid}")
+                self.refreshSteamGames()
+            else:
+                self.fixCompleted.emit(False, "Failed to apply config.")
+        else:
+            self.fixCompleted.emit(False, "No suitable config found.")
 
     def _scan_tester_devices(self):
         import pyudev

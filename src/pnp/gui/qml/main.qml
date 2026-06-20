@@ -24,6 +24,9 @@ ApplicationWindow {
             Layout.fillHeight: true
 
             MonitorPage {}
+            GameLibraryPage {}
+            NonSteamPage {}
+            BluetoothPage {}
             TesterPage {}
             DiagnosticPage {}
             SettingsPage {}
@@ -37,6 +40,15 @@ ApplicationWindow {
 
             TabButton {
                 text: "📺 Monitor"
+            }
+            TabButton {
+                text: "🎮 Library"
+            }
+            TabButton {
+                text: "🚀 Non-Steam"
+            }
+            TabButton {
+                text: "📡 Bluetooth"
             }
             TabButton {
                 text: "🎮 Tester"

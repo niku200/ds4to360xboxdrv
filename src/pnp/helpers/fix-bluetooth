@@ -5,8 +5,26 @@ set -e
 # Disable ERTM
 echo "options bluetooth disable_ertm=1" > /etc/modprobe.d/pnp-bluetooth.conf
 
+# Load modules
+modprobe btusb
+modprobe hidp
+modprobe hid_generic
+
+# 0. Stop service before changing cache
+systemctl stop bluetooth || true
+
 # Clear bluetooth cache (caution: this removes paired devices)
 # Only do this if explicitly needed, but following prompt instructions
-# rm -rf /var/lib/bluetooth/*
+# We clear specific device directories if a MAC is provided as $1
+# Otherwise, we don't clear everything unless absolutely necessary.
+if [ -n "$1" ]; then
+    MAC=$1
+    echo "Clearing cache for specific device: $MAC"
+    for adapter in /var/lib/bluetooth/*; do
+        if [ -d "$adapter/$MAC" ]; then
+            rm -rf "$adapter/$MAC"
+        fi
+    done
+fi
 
-systemctl restart bluetooth
+systemctl start bluetooth

@@ -18,6 +18,9 @@
 - **🔥 Non-Steam Game Power**: Use the `pnp-steam-run` wrapper to force Steam Input features (Gyro, Touchpad, Community Layouts) on *any* standalone executable or emulator.
 - **🔋 Battery Tracking**: Real-time monitoring of controller battery levels and charging status directly in the GUI.
 - **🔍 Visual Input Tester**: A beautiful, real-time visualizer to verify your button mappings and stick accuracy at 60Hz.
+- **🚀 Non-Steam Game Management**: Effortlessly discover games from **Heroic Games Launcher** (Native & Flatpak) and **Hydra Launcher**, and add them to Steam as non-Steam games with optimized Steam Input configuration.
+- **📡 Bluetooth Troubleshooter**: Powerful real-time monitoring of `bluetoothctl` and `journalctl` events to diagnose controller pairing issues.
+- **🖼️ KDE Plasma Integration**: Native support for **Kirigami** UI components and **Kvantum** theme engine for a seamless desktop experience.
 - **🛡️ Diagnostic System**: Built-in system health checks with one-click automated recovery via Polkit.
 - **📜 Professional Logging**: Integrated with **Loguru** for real-time, color-coded logging in both terminal and GUI.
 - **⚙️ XDG & JSONC**: Fully compliant with Linux filesystem standards. Easy-to-edit configuration using JSON with comments (JSONC).
@@ -55,12 +58,20 @@ sudo dnf install evsieve python3-evdev python3-pyudev python3-requests
 sudo dnf install ./pnp-5.2.0.rpm
 ```
 
-### 3. udev Rules
-To ensure the service can manage controllers without root permissions, install the provided udev rules:
-```bash
-sudo cp 99-pnp.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
+### 3. Permissions & udev Rules
+To ensure PNP can manage controllers and create virtual devices without root permissions:
+
+1. **Add your user to the `input` group**:
+   ```bash
+   sudo usermod -aG input $USER
+   ```
+   *Note: You may need to log out and back in for this to take effect.*
+
+2. **Install udev rules**:
+   ```bash
+   sudo cp 99-pnp.rules /etc/udev/rules.d/
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   ```
 
 ---
 
@@ -83,6 +94,9 @@ pnp-gui
 ## 🖥️ GUI Overview
 
 - **Monitor Tab**: Toggle individual controllers, see connected devices, and monitor battery levels in real-time.
+- **Library Tab**: Browse your Steam library and download optimized controller profiles.
+- **Non-Steam Tab**: Discover Heroic and Hydra games and integrate them with Steam for full Steam Input support.
+- **Bluetooth Tab**: Scan for devices and monitor live Bluetooth events to debug pairing.
 - **Tester Tab**: A high-performance real-time visualizer for buttons, sticks, and triggers.
 - **Settings Tab**: Configure handover behavior, rumble strength, system service, and custom mappings.
 - **Logs Tab**: Professional log viewer with real-time updates from the background service and GUI.
@@ -98,6 +112,22 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📜 License
 
 Distributed under the **MIT License**. See `LICENSE` for more information.
+
+---
+
+## 📡 Bluetooth Troubleshooting
+
+If your controller fails to pair or connect, try the following steps in the **Bluetooth Tab**:
+
+1. **Start Monitor**: This streams live events from `bluetoothctl` and `journalctl`. PNP automatically detects BlueZ version and uses the correct monitor command.
+2. **Reset Stack**: This reloads kernel modules (`btusb`, `hidp`, `hid_generic`) and restarts the Bluetooth service.
+3. **Clear Cache**: Use the "🧹 Clear" button next to a device to remove its stale pairing entries from system storage.
+4. **Common Errors**:
+   - `Could not parse HID SDP record`: Often caused by missing `hidp` module. Fixed by **Reset Stack**.
+   - `Protocol error (71)`: Indicates a corrupted pairing cache. Use **Clear Cache** and retry.
+   - `Host is down (112)`: The controller might have turned off or is out of range.
+
+---
 
 ---
 
