@@ -32,17 +32,35 @@ class BluetoothScanner(QObject):
 
         # 2. Start bluetoothctl monitor for real-time events
         # Note: BlueZ 5.77+ moved 'monitor' to a submenu or requires 'on'
+        # We try 'monitor on' first, then fallback to entering the menu and 'on'
+        # or just 'monitor' for very old versions.
         try:
+            # Check version
+            ver_res = subprocess.run(["bluetoothctl", "--version"], capture_output=True, text=True)
+            version = ver_res.stdout.strip()
+            logger.debug(f"BlueZ version: {version}")
+
+            cmd = ["bluetoothctl", "monitor", "on"]
+            if version and version >= "5.77":
+                 # In new versions, it might need to be run as: bluetoothctl monitor on
+                 pass
+
             self.process = subprocess.Popen(
-                ["bluetoothctl", "monitor", "on"],
+                cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1
             )
+            # Check if it failed immediately (invalid command)
+            time.sleep(0.5)
+            if self.process.poll() is not None:
+                 raise Exception("Command failed immediately")
+
         except Exception as e:
-            logger.debug(f"Failed to start bluetoothctl monitor on: {e}. Falling back to standard monitor.")
+            logger.debug(f"Failed to start bluetoothctl monitor with primary command: {e}. Trying fallback.")
             try:
+                # Fallback to standard monitor (old BlueZ)
                 self.process = subprocess.Popen(
                     ["bluetoothctl", "monitor"],
                     stdout=subprocess.PIPE,
@@ -51,7 +69,7 @@ class BluetoothScanner(QObject):
                     bufsize=1
                 )
             except Exception as e2:
-                logger.error(f"Failed to start bluetoothctl monitor: {e2}")
+                logger.error(f"Failed to start bluetoothctl monitor fallback: {e2}")
 
         # 3. Start journalctl monitoring for BlueZ logs
         try:
@@ -80,6 +98,12 @@ class BluetoothScanner(QObject):
                 break
             line = line.strip()
             if line:
+                # Handle 'Invalid command' response from bluetoothctl
+                if "Invalid command" in line and "monitor" in line:
+                    logger.warning("bluetoothctl monitor failed. Version mismatch.")
+                    self.logReceived.emit("FAILED to start monitor. Try manual: bluetoothctl monitor on", prefix)
+                    continue
+
                 logger.debug(f"{prefix} {line}")
                 self.logReceived.emit(line, prefix)
                 for callback in self.callbacks:

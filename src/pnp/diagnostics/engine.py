@@ -114,7 +114,22 @@ class DiagnosticSystem:
                 logger.error(f"Error reading ERTM status: {err}")
 
     def _check_bluetooth_detailed(self):
-        """Performs deeper Bluetooth diagnostics (modules, firmware)."""
+        """Performs deeper Bluetooth diagnostics (modules, firmware, service)."""
+        # 0. Check service status
+        try:
+            res = subprocess.run(["systemctl", "status", "bluetooth"], capture_output=True, text=True, check=False)
+            if "failed" in res.stdout.lower() or "error" in res.stdout.lower():
+                self.results.append({
+                    "id": "bluetooth_service_failed",
+                    "title": "Bluetooth service failed",
+                    "description": "The system bluetooth service is in a failed state.",
+                    "severity": "critical",
+                    "fix_action": "org.pnp.bluetooth.fix",
+                    "helper": "fix-bluetooth"
+                })
+        except Exception:
+            pass
+
         # 1. Check modules
         modules = ['btusb', 'hidp', 'hid_generic']
         missing_modules = []
@@ -133,6 +148,18 @@ class DiagnosticSystem:
                 "description": f"The following modules are not loaded: {', '.join(missing_modules)}. "
                                "This may prevent HID controllers from connecting.",
                 "severity": "warning",
+                "fix_action": "org.pnp.bluetooth.fix",
+                "helper": "fix-bluetooth"
+            })
+
+        # New: Explicit HID module check
+        if 'hidp' in missing_modules:
+            self.results.append({
+                "id": "bluetooth_hid_module",
+                "title": "Bluetooth HID protocol (hidp) missing",
+                "description": "The 'hidp' kernel module is critical for Bluetooth controllers. "
+                               "Without it, SDP records cannot be parsed.",
+                "severity": "critical",
                 "fix_action": "org.pnp.bluetooth.fix",
                 "helper": "fix-bluetooth"
             })

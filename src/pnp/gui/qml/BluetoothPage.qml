@@ -108,6 +108,11 @@ Page {
                             text: "Connect"
                             onClicked: backend.connectBluetoothDevice(modelData.mac)
                         }
+                        Button {
+                            text: "🧹 Clear"
+                            flat: true
+                            onClicked: backend.clearBluetoothCache(modelData.mac)
+                        }
                     }
                 }
 

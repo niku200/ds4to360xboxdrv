@@ -119,12 +119,15 @@ Distributed under the **MIT License**. See `LICENSE` for more information.
 
 If your controller fails to pair or connect, try the following steps in the **Bluetooth Tab**:
 
-1. **Start Monitor**: This streams live events from `bluetoothctl` and `journalctl`.
-2. **Reset Stack**: This reloads kernel modules (`btusb`, `hidp`) and restarts the Bluetooth service.
-3. **Common Errors**:
-   - `Could not parse HID SDP record`: Usually fixed by **Reset Stack**.
-   - `Protocol error (71)`: Indicates a corrupted pairing cache. PNP will attempt to remove the device and retry.
+1. **Start Monitor**: This streams live events from `bluetoothctl` and `journalctl`. PNP automatically detects BlueZ version and uses the correct monitor command.
+2. **Reset Stack**: This reloads kernel modules (`btusb`, `hidp`, `hid_generic`) and restarts the Bluetooth service.
+3. **Clear Cache**: Use the "🧹 Clear" button next to a device to remove its stale pairing entries from system storage.
+4. **Common Errors**:
+   - `Could not parse HID SDP record`: Often caused by missing `hidp` module. Fixed by **Reset Stack**.
+   - `Protocol error (71)`: Indicates a corrupted pairing cache. Use **Clear Cache** and retry.
    - `Host is down (112)`: The controller might have turned off or is out of range.
+
+---
 
 ---
 

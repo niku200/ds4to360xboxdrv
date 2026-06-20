@@ -45,7 +45,7 @@ class PolkitManager:
             return False
 
     @staticmethod
-    def run_helper(helper_name, action_id):
+    def run_helper(helper_name, action_id, args=None):
         """Runs a privileged helper script via pkexec."""
         # Try system path first
         helper_path = f"/usr/lib/pnp/helpers/{helper_name}"
@@ -65,11 +65,18 @@ class PolkitManager:
             logger.error(error_msg)
             return False, error_msg
 
-        logger.info(f"Executing privileged helper: {helper_path} via pkexec")
+        cmd = ["pkexec", helper_path]
+        if args:
+            if isinstance(args, list):
+                cmd.extend(args)
+            else:
+                cmd.append(str(args))
+
+        logger.info(f"Executing privileged helper: {' '.join(cmd)}")
 
         try:
             result = subprocess.run(
-                ["pkexec", helper_path],
+                cmd,
                 capture_output=True,
                 text=True,
                 check=False

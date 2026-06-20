@@ -307,7 +307,21 @@ class Backend(QObject):
     def pairBluetoothDevice(self, mac):
         def run():
             success = self._bluetooth_scanner.pair_device(mac)
+            if not success:
+                # If SM failed, check if we need to offer cache clear
+                # The scanner logs SM [FAIL] with hints
+                pass
             self.fixCompleted.emit(success, f"Pairing {'successful' if success else 'failed'}")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot(str)
+    def clearBluetoothCache(self, mac):
+        logger.info(f"User requested cache clear for {mac}")
+        from pnp.diagnostics.polkit import PolkitManager
+        def run():
+            # Use fix-bluetooth helper with MAC argument for targeted cleanup
+            success, error = PolkitManager.run_helper("fix-bluetooth", "org.pnp.bluetooth.fix", args=[mac])
+            self.fixCompleted.emit(success, error or f"Cache cleared for {mac}. Please retry pairing.")
         threading.Thread(target=run, daemon=True).start()
 
     @Slot(str)
