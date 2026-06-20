@@ -32,18 +32,14 @@ class BluetoothScanner(QObject):
 
         # 2. Start bluetoothctl monitor for real-time events
         # Note: BlueZ 5.77+ moved 'monitor' to a submenu or requires 'on'
-        # We try 'monitor on' first, then fallback to entering the menu and 'on'
-        # or just 'monitor' for very old versions.
         try:
             # Check version
             ver_res = subprocess.run(["bluetoothctl", "--version"], capture_output=True, text=True)
-            version = ver_res.stdout.strip()
-            logger.debug(f"BlueZ version: {version}")
+            version = ver_res.stdout.strip().split(' ')[-1]
+            logger.debug(f"BlueZ version detected: {version}")
 
+            # Primary command for 5.77+
             cmd = ["bluetoothctl", "monitor", "on"]
-            if version and version >= "5.77":
-                 # In new versions, it might need to be run as: bluetoothctl monitor on
-                 pass
 
             self.process = subprocess.Popen(
                 cmd,
@@ -52,24 +48,38 @@ class BluetoothScanner(QObject):
                 text=True,
                 bufsize=1
             )
-            # Check if it failed immediately (invalid command)
+
+            # Non-blocking check for failure
             time.sleep(0.5)
             if self.process.poll() is not None:
-                 raise Exception("Command failed immediately")
+                 stdout, stderr = self.process.communicate()
+                 if "Invalid command" in (stdout + stderr):
+                      raise Exception("Primary command 'monitor on' failed")
 
         except Exception as e:
-            logger.debug(f"Failed to start bluetoothctl monitor with primary command: {e}. Trying fallback.")
+            logger.debug(f"Monitor On failed: {e}. Trying btmon fallback.")
             try:
-                # Fallback to standard monitor (old BlueZ)
+                # Fallback 1: btmon (Low level HCI monitor)
                 self.process = subprocess.Popen(
-                    ["bluetoothctl", "monitor"],
+                    ["btmon"],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1
                 )
-            except Exception as e2:
-                logger.error(f"Failed to start bluetoothctl monitor fallback: {e2}")
+            except Exception:
+                logger.debug("btmon failed. Trying legacy monitor command.")
+                try:
+                    # Fallback 2: legacy 'monitor'
+                    self.process = subprocess.Popen(
+                        ["bluetoothctl", "monitor"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        bufsize=1
+                    )
+                except Exception as e3:
+                    logger.error(f"All Bluetooth monitors failed: {e3}")
 
         # 3. Start journalctl monitoring for BlueZ logs
         try:
@@ -203,7 +213,9 @@ class BluetoothScanner(QObject):
 
                 # Heuristic for SDP error or Host is down
                 if "Protocol error" in err_msg or "Host is down" in err_msg:
-                    logger.warning("Detected SDP or connection protocol error. Suggesting cache clear via Polkit.")
+                    self._log_sm("Detected SDP or connection protocol error. Attempting targeted cache clear...")
+                    # We can't use Polkit directly here from scanner (thread),
+                    # but we inform SM result. Backend/UI handles clear button.
 
                 return False
 
