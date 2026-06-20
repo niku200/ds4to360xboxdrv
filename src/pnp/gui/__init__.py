@@ -19,6 +19,40 @@ class LogSink:
         self.backend.appendLog(clean_msg)
 
 
+def setup_kde_integration(app, engine):
+    """Configure Kirigami and Kvantum for KDE Plasma integration"""
+
+    # 1. Configure QML import paths for Kirigami
+    kirigami_paths = [
+        "/usr/lib/qt6/qml/",
+        "/usr/lib64/qt6/qml/",
+        "/usr/lib/x86_64-linux-gnu/qt6/qml/",
+        "/usr/lib/aarch64-linux-gnu/qt6/qml/"
+    ]
+
+    qml_path = os.environ.get("QML_IMPORT_PATH", "")
+    for path in kirigami_paths:
+        if os.path.exists(path):
+            engine.addImportPath(path)
+            if path not in qml_path:
+                qml_path = f"{path}:{qml_path}" if qml_path else path
+
+    if qml_path:
+        os.environ["QML_IMPORT_PATH"] = qml_path
+
+    # 2. Apply Kvantum theme with fallback
+    try:
+        app.setStyle("kvantum")
+        logger.info("Kvantum theme applied")
+    except Exception:
+        try:
+            app.setStyle("breeze")
+            logger.info("Breeze theme applied as fallback")
+        except Exception:
+            app.setStyle("fusion")
+            logger.info("Fusion theme applied as fallback")
+
+
 def main():
     # Ensure src directory is in sys.path
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +68,9 @@ def main():
     app.setApplicationVersion("5.2.0")
 
     engine = QQmlApplicationEngine()
+
+    # KDE Integration (Kirigami & Kvantum)
+    setup_kde_integration(app, engine)
 
     backend = Backend()
     engine.rootContext().setContextProperty("backend", backend)

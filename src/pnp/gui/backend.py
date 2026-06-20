@@ -11,8 +11,11 @@ from pnp.core.manager import ControllerManager
 from pnp.services.config_manager import ConfigManager
 from pnp.services.profile_downloader import ProfileDownloader
 from pnp.diagnostics.engine import DiagnosticSystem
+from PySide6.QtWidgets import QFileDialog
+from PySide6.QtCore import QUrl, QStandardPaths
 from pnp.helpers.steam_library import get_steam_games
 from pnp.services.nonsteam_manager import NonSteamManager
+from pnp.services.bluetooth_scanner import BluetoothScanner
 
 QML_IMPORT_NAME = "ir.pakrohk.pnp"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -99,6 +102,9 @@ class Backend(QObject):
     serviceActiveChanged = Signal()
     diagnosticIssuesChanged = Signal()
     fixCompleted = Signal(bool, str)
+    directorySelected = Signal(str)
+    bluetoothLogReceived = Signal(str, str)
+    bluetoothScanFinished = Signal(list)
 
     def __init__(self):
         super().__init__()
@@ -118,6 +124,9 @@ class Backend(QObject):
         self._steam_games = []
         self._nonsteam_manager = NonSteamManager()
         self._non_steam_games = []
+        self._bluetooth_scanner = BluetoothScanner()
+        self._bluetooth_scanner.logReceived.connect(self.bluetoothLogReceived)
+        self._bluetooth_scanner.scanFinished.connect(self._on_bluetooth_scan_finished)
 
         self._status_timer = QTimer()
         self._status_timer.timeout.connect(self._update_status)
@@ -249,6 +258,64 @@ class Backend(QObject):
                 self.refreshNonSteamGames()
 
         threading.Thread(target=run_action, daemon=True).start()
+
+    @Slot()
+    def selectGamesDirectory(self):
+        # We need a parent widget for QFileDialog, but Backend is a QObject.
+        # However, we can use None as parent.
+        directory = QFileDialog.getExistingDirectory(
+            None,
+            "Select Games Directory",
+            QStandardPaths.standardLocations(QStandardPaths.HomeLocation)[0],
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if directory:
+            self.directorySelected.emit(directory)
+            self.scanDirectory(directory)
+
+    @Slot(str)
+    def scanDirectory(self, path):
+        def run_scan():
+            self._non_steam_games = self._nonsteam_manager.do_scan(manual_path=path)
+            self.nonSteamGamesChanged.emit()
+        threading.Thread(target=run_scan, daemon=True).start()
+
+    @Slot()
+    def startBluetoothMonitoring(self):
+        self._bluetooth_scanner.start_monitoring()
+
+    @Slot()
+    def stopBluetoothMonitoring(self):
+        self._bluetooth_scanner.stop_monitoring()
+
+    @Slot()
+    def scanBluetoothDevices(self):
+        self._bluetooth_scanner.scan_devices()
+
+    def _on_bluetooth_scan_finished(self, devices_output):
+        devices = []
+        for line in devices_output.splitlines():
+            parts = line.split(' ', 2)
+            if len(parts) >= 3:
+                devices.append({
+                    "mac": parts[1],
+                    "name": parts[2]
+                })
+        self.bluetoothScanFinished.emit(devices)
+
+    @Slot(str)
+    def pairBluetoothDevice(self, mac):
+        def run():
+            success = self._bluetooth_scanner.pair_device(mac)
+            self.fixCompleted.emit(success, f"Pairing {'successful' if success else 'failed'}")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot(str)
+    def connectBluetoothDevice(self, mac):
+        def run():
+            success = self._bluetooth_scanner.connect_device(mac)
+            self.fixCompleted.emit(success, f"Connection {'successful' if success else 'failed'}")
+        threading.Thread(target=run, daemon=True).start()
 
     @Slot()
     def refreshSteamGames(self):

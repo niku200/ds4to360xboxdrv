@@ -36,6 +36,7 @@ The project has moved from a GObject-based architecture to a Qt-based one. This 
     - `SettingsPage.qml`: Configuration and service management.
     - `GameLibraryPage.qml`: Steam Input profile management.
     - `NonSteamPage.qml`: Heroic/Hydra games integration.
+    - `BluetoothPage.qml`: Bluetooth debugging and management.
     - `LogPage.qml`: System logs.
 
 ### Python-QML Bridge

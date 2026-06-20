@@ -26,6 +26,7 @@ ApplicationWindow {
             MonitorPage {}
             GameLibraryPage {}
             NonSteamPage {}
+            BluetoothPage {}
             TesterPage {}
             DiagnosticPage {}
             SettingsPage {}
@@ -45,6 +46,9 @@ ApplicationWindow {
             }
             TabButton {
                 text: "🚀 Non-Steam"
+            }
+            TabButton {
+                text: "📡 Bluetooth"
             }
             TabButton {
                 text: "🎮 Tester"

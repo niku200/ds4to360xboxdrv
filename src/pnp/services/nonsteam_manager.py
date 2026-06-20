@@ -5,72 +5,7 @@ import glob
 from loguru import logger
 from PySide6.QtCore import QObject, Signal, Slot, QThread
 
-class HeroicScanner:
-    def __init__(self, games_dir=None):
-        self.config_dir = os.path.expanduser("~/.config/heroic/GamesConfig")
-        self.games_dir = games_dir or os.path.expanduser("~/Games/Heroic")
-
-    def scan(self):
-        games = []
-        if not os.path.exists(self.config_dir):
-            logger.warning(f"Heroic config dir not found: {self.config_dir}")
-            return games
-
-        for config_file in glob.glob(os.path.join(self.config_dir, "*.json")):
-            try:
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    game = {
-                        "id": data.get("appName"),
-                        "title": data.get("title"),
-                        "installDir": data.get("installDir"),
-                        "executable": data.get("executable"),
-                        "launchArgs": data.get("launchArgs", ""),
-                        "source": "Heroic",
-                        "icon": "heroic"
-                    }
-                    if game["title"] and game["executable"]:
-                        games.append(game)
-            except Exception as e:
-                logger.error(f"Error parsing Heroic config {config_file}: {e}")
-        return games
-
-class HydraScanner:
-    def __init__(self, games_dir=None):
-        # Hydra stores data in ~/.local/share/hydra/
-        self.config_dir = os.path.expanduser("~/.local/share/hydra")
-        self.games_dir = games_dir or os.path.expanduser("~/.local/share/hydra/games")
-
-    def scan(self):
-        games = []
-        manifest_path = os.path.join(self.config_dir, "games.json")
-        if not os.path.exists(manifest_path):
-            # Try alternate location
-            manifest_path = os.path.expanduser("~/.config/hydra/games.json")
-            if not os.path.exists(manifest_path):
-                logger.warning("Hydra manifest not found.")
-                return games
-
-        try:
-            with open(manifest_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Hydra's structure might vary, assuming a list of games
-                if isinstance(data, list):
-                    for item in data:
-                        game = {
-                            "id": item.get("id") or item.get("name"),
-                            "title": item.get("name"),
-                            "installDir": item.get("installPath"),
-                            "executable": item.get("executablePath"),
-                            "launchArgs": item.get("launchOptions", ""),
-                            "source": "Hydra",
-                            "icon": "hydra"
-                        }
-                        if game["title"] and game["executable"]:
-                            games.append(game)
-        except Exception as e:
-            logger.error(f"Error parsing Hydra manifest: {e}")
-        return games
+from pnp.services.game_scanner import HeroicScanner, HydraScanner, DirectoryScanner
 
 class SteamShortcutManager:
     def __init__(self):
@@ -204,6 +139,7 @@ class NonSteamManager(QObject):
         super().__init__()
         self.heroic_scanner = HeroicScanner()
         self.hydra_scanner = HydraScanner()
+        self.directory_scanner = DirectoryScanner()
         self.shortcut_manager = SteamShortcutManager()
 
     @Slot()
@@ -212,11 +148,14 @@ class NonSteamManager(QObject):
         # But this method is called from UI, so we should start a thread.
         pass
 
-    def do_scan(self):
+    def do_scan(self, manual_path=None):
         logger.info("Scanning for Non-Steam games...")
         games = []
         games.extend(self.heroic_scanner.scan())
         games.extend(self.hydra_scanner.scan())
+
+        if manual_path:
+            games.extend(self.directory_scanner.scan_directory(manual_path))
 
         for game in games:
             game["isAdded"] = self.shortcut_manager.is_added(game)

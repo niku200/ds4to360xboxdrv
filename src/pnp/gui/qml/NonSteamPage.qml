@@ -95,10 +95,19 @@ Page {
                 }
             }
 
-            Button {
-                text: "🔄 Refresh Library"
+            RowLayout {
                 Layout.fillWidth: true
-                onClicked: backend.refreshNonSteamGames()
+                spacing: 10
+                Button {
+                    text: "🔄 Refresh"
+                    Layout.fillWidth: true
+                    onClicked: backend.refreshNonSteamGames()
+                }
+                Button {
+                    text: "📂 Select Folder"
+                    Layout.fillWidth: true
+                    onClicked: backend.selectGamesDirectory()
+                }
             }
         }
 
