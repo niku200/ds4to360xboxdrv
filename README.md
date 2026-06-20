@@ -115,4 +115,17 @@ Distributed under the **MIT License**. See `LICENSE` for more information.
 
 ---
 
+## 📡 Bluetooth Troubleshooting
+
+If your controller fails to pair or connect, try the following steps in the **Bluetooth Tab**:
+
+1. **Start Monitor**: This streams live events from `bluetoothctl` and `journalctl`.
+2. **Reset Stack**: This reloads kernel modules (`btusb`, `hidp`) and restarts the Bluetooth service.
+3. **Common Errors**:
+   - `Could not parse HID SDP record`: Usually fixed by **Reset Stack**.
+   - `Protocol error (71)`: Indicates a corrupted pairing cache. PNP will attempt to remove the device and retry.
+   - `Host is down (112)`: The controller might have turned off or is out of range.
+
+---
+
 **PNP (PS NOT PS)** — *PlayStation controllers, at home on Linux.*

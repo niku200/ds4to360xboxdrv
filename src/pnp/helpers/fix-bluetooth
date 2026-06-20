@@ -5,6 +5,11 @@ set -e
 # Disable ERTM
 echo "options bluetooth disable_ertm=1" > /etc/modprobe.d/pnp-bluetooth.conf
 
+# Load modules
+modprobe btusb
+modprobe hidp
+modprobe hid_generic
+
 # Clear bluetooth cache (caution: this removes paired devices)
 # Only do this if explicitly needed, but following prompt instructions
 # rm -rf /var/lib/bluetooth/*

@@ -31,16 +31,27 @@ class BluetoothScanner(QObject):
             logger.error(f"Failed to power on Bluetooth: {e}")
 
         # 2. Start bluetoothctl monitor for real-time events
+        # Note: BlueZ 5.77+ moved 'monitor' to a submenu or requires 'on'
         try:
             self.process = subprocess.Popen(
-                ["bluetoothctl", "monitor"],
+                ["bluetoothctl", "monitor", "on"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1
             )
         except Exception as e:
-            logger.error(f"Failed to start bluetoothctl monitor: {e}")
+            logger.debug(f"Failed to start bluetoothctl monitor on: {e}. Falling back to standard monitor.")
+            try:
+                self.process = subprocess.Popen(
+                    ["bluetoothctl", "monitor"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1
+                )
+            except Exception as e2:
+                logger.error(f"Failed to start bluetoothctl monitor: {e2}")
 
         # 3. Start journalctl monitoring for BlueZ logs
         try:
@@ -124,12 +135,37 @@ class BluetoothScanner(QObject):
             logger.error(f"Failed to get device info: {e}")
             return ""
 
+    def _log_sm(self, message):
+        prefix = "[SM]"
+        logger.debug(f"{prefix} {message}")
+        self.logReceived.emit(message, prefix)
+
     def pair_device(self, mac_address):
-        """Pair with a Bluetooth device with full logging"""
-        logger.info(f"Attempting to pair with {mac_address}")
+        """Pair with a Bluetooth device using a robust state machine"""
+        self._log_sm(f"Starting pairing state machine for {mac_address}")
 
         try:
-            # Start pairing
+            # 0. Pre-checks: Service and Modules
+            self._ensure_bt_service()
+            self._ensure_bt_modules()
+
+            # 1. Power On
+            self._log_sm("Pairing SM [1/6]: Powering on...")
+            subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, check=False)
+
+            # 2. Agent
+            self._log_sm("Pairing SM [2/6]: Enabling agent...")
+            subprocess.run(["bluetoothctl", "agent", "on"], capture_output=True, check=False)
+            subprocess.run(["bluetoothctl", "default-agent"], capture_output=True, check=False)
+
+            # 3. Clean start if needed
+            # We don't remove /var/lib/bluetooth here as it needs root/polkit,
+            # but we remove from bluetoothctl
+            self._log_sm(f"Pairing SM [3/6]: Removing existing device {mac_address} if any...")
+            subprocess.run(["bluetoothctl", "remove", mac_address], capture_output=True, check=False)
+
+            # 4. Pair
+            self._log_sm(f"Pairing SM [4/6]: Attempting to pair with {mac_address}")
             result = subprocess.run(
                 ["bluetoothctl", "pair", mac_address],
                 capture_output=True,
@@ -137,17 +173,63 @@ class BluetoothScanner(QObject):
                 timeout=30
             )
 
-            if result.returncode == 0:
-                logger.info(f"Pairing initiated with {mac_address}")
-                # Trust the device after pairing
-                subprocess.run(["bluetoothctl", "trust", mac_address], capture_output=True)
+            if result.returncode != 0:
+                err_msg = result.stderr.strip() or result.stdout.strip()
+                self._log_sm(f"Pairing SM [FAIL]: Pairing failed: {err_msg}")
+
+                # Heuristic for SDP error or Host is down
+                if "Protocol error" in err_msg or "Host is down" in err_msg:
+                    logger.warning("Detected SDP or connection protocol error. Suggesting cache clear via Polkit.")
+
+                return False
+
+            # 5. Trust
+            self._log_sm(f"Pairing SM [5/6]: Trusting {mac_address}")
+            subprocess.run(["bluetoothctl", "trust", mac_address], capture_output=True, check=False)
+
+            # 6. Connect
+            self._log_sm(f"Pairing SM [6/6]: Connecting to {mac_address}")
+            conn_result = subprocess.run(
+                ["bluetoothctl", "connect", mac_address],
+                capture_output=True,
+                text=True,
+                timeout=20
+            )
+
+            if conn_result.returncode == 0:
+                self._log_sm(f"Pairing SM [SUCCESS]: {mac_address} is paired, trusted, and connected.")
                 return True
             else:
-                logger.error(f"Pairing failed: {result.stderr}")
+                self._log_sm(f"Pairing SM [PARTIAL]: Paired/Trusted, but connection failed: {conn_result.stderr}")
                 return False
-        except Exception as e:
-            logger.error(f"Pairing exception: {e}")
+
+        except subprocess.TimeoutExpired:
+            self._log_sm(f"Pairing SM [TIMEOUT]: Operation timed out for {mac_address}")
             return False
+        except Exception as e:
+            self._log_sm(f"Pairing SM [ERROR]: Unexpected exception: {e}")
+            logger.exception(e)
+            return False
+
+    def _ensure_bt_service(self):
+        """Checks if bluetooth service is active"""
+        try:
+            res = subprocess.run(["systemctl", "is-active", "bluetooth"], capture_output=True, text=True)
+            if res.stdout.strip() != 'active':
+                logger.warning("Bluetooth service not active. PNP diagnostics will offer fix.")
+        except Exception:
+            pass
+
+    def _ensure_bt_modules(self):
+        """Check for required kernel modules"""
+        modules = ['btusb', 'hidp', 'hid_generic']
+        for mod in modules:
+            try:
+                res = subprocess.run(f"lsmod | grep {mod}", shell=True, capture_output=True)
+                if res.returncode != 0:
+                    logger.warning(f"Kernel module {mod} might not be loaded. This can cause HID issues.")
+            except Exception:
+                pass
 
     def connect_device(self, mac_address):
         """Connect to a paired Bluetooth device"""
