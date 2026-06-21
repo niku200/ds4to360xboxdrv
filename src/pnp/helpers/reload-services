@@ -1,0 +1,7 @@
+#!/bin/sh
+# Helper to reload systemd and udev
+set -e
+
+systemctl daemon-reload
+udevadm control --reload-rules
+udevadm trigger

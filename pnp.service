@@ -1,0 +1,38 @@
+[Unit]
+Description=PlayStation to Xbox Controller Mapper
+After=local-fs.target bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/share/pnp
+ExecStart=/usr/share/pnp/venv/bin/python3 -m pnp.main --headless
+Environment=PYTHONPATH=/usr/share/pnp/src:/usr/share/pnp
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_RUNTIME_DIR=%t
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15
+KillMode=process
+StandardOutput=journal
+StandardError=journal
+
+# Security Hardening
+# DynamicUser=yes can cause issues with /dev/input permissions and link creation
+User=root
+Group=root
+SupplementaryGroups=input
+RuntimeDirectory=pnp
+ConfigurationDirectory=pnp
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Helper to load uinput kernel module
+set -e
+
+modprobe uinput
+echo "uinput" > /etc/modules-load.d/pnp-uinput.conf

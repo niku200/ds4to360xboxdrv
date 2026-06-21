@@ -1,0 +1,584 @@
+import os
+import json
+import subprocess
+import threading
+import evdev
+from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, QSocketNotifier
+from PySide6.QtQml import QmlElement
+from loguru import logger
+
+from pnp.core.manager import ControllerManager
+from pnp.services.config_manager import ConfigManager
+from pnp.services.profile_downloader import ProfileDownloader
+from pnp.diagnostics.engine import DiagnosticSystem
+from PySide6.QtWidgets import QFileDialog
+from PySide6.QtCore import QUrl, QStandardPaths
+from pnp.helpers.steam_library import get_steam_games
+from pnp.services.nonsteam_manager import NonSteamManager
+from pnp.services.bluetooth_scanner import BluetoothScanner
+
+QML_IMPORT_NAME = "ir.pakrohk.pnp"
+QML_IMPORT_MAJOR_VERSION = 1
+
+
+class TesterWorker(QObject):
+    updated = Signal()
+
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self.name = "Unknown"
+        self.is_virtual = False
+        self.buttons = {i: False for i in range(300, 800)}
+        self.axes = [0.5, 0.5, 0.5, 0.5, 0.0, 0.0]
+        self.device = None
+        self.notifier = None
+
+    def start(self):
+        try:
+            if "js" in self.path:
+                # We prefer event devices for evdev
+                event_path = self.path.replace("js", "event")
+                if os.path.exists(event_path):
+                    self.path = event_path
+
+            self.device = evdev.InputDevice(self.path)
+            self.name = self.device.name
+            self.is_virtual = (
+                "xbox" in self.name.lower() or "pnp" in self.name.lower()
+            )
+            self.notifier = QSocketNotifier(self.device.fd, QSocketNotifier.Read)
+            self.notifier.activated.connect(self._read_events)
+            logger.debug(f"TesterWorker monitoring {self.path} ({self.name})")
+        except Exception as err:
+            logger.error(f"TesterWorker failed to open {self.path}: {err}")
+
+    def _read_events(self):
+        try:
+            if not self.device:
+                return
+            changed = False
+            for event in self.device.read():
+                if event.type == evdev.ecodes.EV_KEY:
+                    if self.buttons.get(event.code) != bool(event.value):
+                        self.buttons[event.code] = bool(event.value)
+                        changed = True
+                elif event.type == evdev.ecodes.EV_ABS:
+                    # Mapping for common axes
+                    mapping = {0: 0, 1: 1, 3: 2, 4: 3, 2: 4, 5: 5}
+                    if event.code in mapping:
+                        idx = mapping[event.code]
+                        abs_cap = self.device.capabilities()[evdev.ecodes.EV_ABS]
+                        absinfo = abs_cap[event.code]
+                        val = (event.value - absinfo.min) / (
+                            absinfo.max - absinfo.min
+                        )
+                        if abs(self.axes[idx] - val) > 0.01: # Threshold
+                            self.axes[idx] = val
+                            changed = True
+            if changed:
+                self.updated.emit()
+        except Exception:
+            pass
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "path": self.path,
+            "isVirtual": self.is_virtual,
+            "buttons": self.buttons,
+            "axes": self.axes
+        }
+
+
+@QmlElement
+class Backend(QObject):
+    controllersChanged = Signal()
+    testerDevicesChanged = Signal()
+    steamGamesChanged = Signal()
+    nonSteamGamesChanged = Signal()
+    configChanged = Signal()
+    logsChanged = Signal()
+    serviceActiveChanged = Signal()
+    diagnosticIssuesChanged = Signal()
+    fixCompleted = Signal(bool, str)
+    directorySelected = Signal(str)
+    bluetoothLogReceived = Signal(str, str)
+    bluetoothScanFinished = Signal(list)
+
+    def __init__(self):
+        super().__init__()
+        self._manager = None
+        self._config_manager = ConfigManager()
+        self._logs = []  # Store as list for easier filtering
+        self._filtered_logs = ""
+        self._log_level_filter = "All"
+        self._log_module_filter = "All"
+
+        self._service_active = False
+        self._tester_workers = {}  # path -> TesterWorker
+        self._is_observer = True
+        self._diag_system = DiagnosticSystem()
+        self._diag_issues = []
+        self._profile_downloader = ProfileDownloader()
+        self._steam_games = []
+        self._nonsteam_manager = NonSteamManager()
+        self._non_steam_games = []
+        self._bluetooth_scanner = BluetoothScanner()
+        self._bluetooth_scanner.logReceived.connect(self.bluetoothLogReceived)
+        self._bluetooth_scanner.scanFinished.connect(self._on_bluetooth_scan_finished)
+
+        self._status_timer = QTimer()
+        self._status_timer.timeout.connect(self._update_status)
+        self._status_timer.start(1000)
+
+        self._tester_scan_timer = QTimer()
+        self._tester_scan_timer.timeout.connect(self._scan_tester_devices)
+        self._tester_scan_timer.start(2000)
+
+        self._update_status()
+
+    def _init_backend(self):
+        active = self._check_service_active()
+        if active:
+            self._is_observer = True
+            self._manager = None
+        else:
+            self._is_observer = False
+            self._manager = ControllerManager()
+            self._manager.start()
+            self._manager.controller_list_changed.connect(
+                self.controllersChanged
+            )
+
+    def _check_service_active(self):
+        try:
+            res = subprocess.run(
+                ["systemctl", "is-active", "pnp.service"],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            active = res.stdout.strip() == "active"
+            if active != self._service_active:
+                self._service_active = active
+                self.serviceActiveChanged.emit()
+            return active
+        except Exception:
+            return False
+
+    def _update_status(self):
+        old_active = self._service_active
+        active = self._check_service_active()
+
+        if active != old_active:
+            if active:
+                if self._manager:
+                    self._manager.stop_all()
+                    self._manager = None
+                self._is_observer = True
+            else:
+                self._init_backend()
+
+        if self._is_observer:
+            self.controllersChanged.emit()
+
+    @Property(list, notify=controllersChanged)
+    def controllers(self):
+        if not self._is_observer and self._manager:
+            return [
+                {
+                    "path": c.device_path,
+                    "name": c.name,
+                    "serial": c.serial,
+                    "isActive": c.is_active,
+                    "batteryPercentage": c.battery_percentage,
+                    "batteryStatus": c.battery_status
+                }
+                for c in self._manager.controllers.values()
+            ]
+
+        try:
+            status_file = "/run/pnp/status.json"
+            if os.path.exists(status_file):
+                with open(status_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return [
+                        {
+                            "path": "Managed by Service",
+                            "name": name,
+                            "serial": "Unknown",
+                            "isActive": True,
+                            "batteryPercentage": -1,
+                            "batteryStatus": "Unknown"
+                        }
+                        for name in data.get("controllers", [])
+                    ]
+        except Exception:
+            pass
+        return []
+
+    @Property(list, notify=testerDevicesChanged)
+    def testerDevices(self):
+        return [w.to_dict() for w in self._tester_workers.values()]
+
+    @Property(list, notify=steamGamesChanged)
+    def steamGames(self):
+        return self._steam_games
+
+    @Property(list, notify=nonSteamGamesChanged)
+    def nonSteamGames(self):
+        return self._non_steam_games
+
+    @Slot()
+    def refreshNonSteamGames(self):
+        # Run scan in a thread to avoid freezing UI
+        def run_scan():
+            self._non_steam_games = self._nonsteam_manager.do_scan()
+            self.nonSteamGamesChanged.emit()
+
+        threading.Thread(target=run_scan, daemon=True).start()
+
+    @Slot(dict)
+    def addNonSteamGame(self, game):
+        def run_action():
+            success, message = self._nonsteam_manager.add_to_steam(game)
+            self.fixCompleted.emit(success, message)
+            if success:
+                self.refreshNonSteamGames()
+
+        threading.Thread(target=run_action, daemon=True).start()
+
+    @Slot(str)
+    def removeNonSteamGame(self, game_title):
+        def run_action():
+            success, message = self._nonsteam_manager.remove_from_steam(game_title)
+            self.fixCompleted.emit(success, message)
+            if success:
+                self.refreshNonSteamGames()
+
+        threading.Thread(target=run_action, daemon=True).start()
+
+    @Slot()
+    def selectGamesDirectory(self):
+        # We need a parent widget for QFileDialog, but Backend is a QObject.
+        # However, we can use None as parent.
+        directory = QFileDialog.getExistingDirectory(
+            None,
+            "Select Games Directory",
+            QStandardPaths.standardLocations(QStandardPaths.HomeLocation)[0],
+            QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
+        )
+        if directory:
+            self.directorySelected.emit(directory)
+            self.scanDirectory(directory)
+
+    @Slot(str)
+    def scanDirectory(self, path):
+        def run_scan():
+            self._non_steam_games = self._nonsteam_manager.do_scan(manual_path=path)
+            self.nonSteamGamesChanged.emit()
+        threading.Thread(target=run_scan, daemon=True).start()
+
+    @Slot()
+    def startBluetoothMonitoring(self):
+        self._bluetooth_scanner.start_monitoring()
+
+    @Slot()
+    def stopBluetoothMonitoring(self):
+        self._bluetooth_scanner.stop_monitoring()
+
+    @Slot()
+    def scanBluetoothDevices(self):
+        self._bluetooth_scanner.scan_devices()
+
+    def _on_bluetooth_scan_finished(self, devices_output):
+        devices = []
+        for line in devices_output.splitlines():
+            parts = line.split(' ', 2)
+            if len(parts) >= 3:
+                devices.append({
+                    "mac": parts[1],
+                    "name": parts[2]
+                })
+        self.bluetoothScanFinished.emit(devices)
+
+    @Slot(str)
+    def pairBluetoothDevice(self, mac):
+        def run():
+            success = self._bluetooth_scanner.pair_device(mac)
+            if not success:
+                # If SM failed, check if we need to offer cache clear
+                # The scanner logs SM [FAIL] with hints
+                pass
+            self.fixCompleted.emit(success, f"Pairing {'successful' if success else 'failed'}")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot(str)
+    def clearBluetoothCache(self, mac):
+        logger.info(f"User requested cache clear for {mac}")
+        from pnp.diagnostics.polkit import PolkitManager
+        def run():
+            # Use fix-bluetooth helper with MAC argument for targeted cleanup
+            success, error = PolkitManager.run_helper("fix-bluetooth", "org.pnp.bluetooth.fix", args=[mac])
+            self.fixCompleted.emit(success, error or f"Cache cleared for {mac}. Please retry pairing.")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot(str)
+    def connectBluetoothDevice(self, mac):
+        def run():
+            success = self._bluetooth_scanner.connect_device(mac)
+            self.fixCompleted.emit(success, f"Connection {'successful' if success else 'failed'}")
+        threading.Thread(target=run, daemon=True).start()
+
+    @Slot()
+    def refreshSteamGames(self):
+        logger.info("Refreshing Steam library...")
+        self._steam_games = get_steam_games()
+        # Add 'applied' status
+        for game in self._steam_games:
+            game['applied'] = self._is_profile_applied(game['appid'])
+        self.steamGamesChanged.emit()
+
+    def _is_profile_applied(self, appid):
+        user_dirs = [
+            d for d in os.listdir(self._profile_downloader.userdata_path)
+            if d.isdigit()
+        ]
+        for user_id in user_dirs:
+            target_file = os.path.join(
+                self._profile_downloader.userdata_path, user_id,
+                "controller_configs", "apps", appid, "pnp_autoset.vdf"
+            )
+            if os.path.exists(target_file):
+                return True
+        return False
+
+    @Slot(str)
+    def downloadGameProfile(self, appid):
+        logger.info(f"Downloading profile for AppID {appid}...")
+        config = self._profile_downloader.get_best_config(appid)
+        if config:
+            success = self._profile_downloader.apply_config(appid, config)
+            if success:
+                self._profile_downloader.trigger_steam_reload()
+                self.fixCompleted.emit(True, f"Profile applied for {appid}")
+                self.refreshSteamGames()
+            else:
+                self.fixCompleted.emit(False, "Failed to apply config.")
+        else:
+            self.fixCompleted.emit(False, "No suitable config found.")
+
+    def _scan_tester_devices(self):
+        import pyudev
+        ctx = pyudev.Context()
+        current_paths = set()
+        for device in ctx.list_devices(
+            subsystem='input', ID_INPUT_JOYSTICK='1'
+        ):
+            if not device.device_node:
+                continue
+            path = device.device_node
+            current_paths.add(path)
+            if path not in self._tester_workers:
+                worker = TesterWorker(path)
+                worker.updated.connect(self.testerDevicesChanged)
+                worker.start()
+                self._tester_workers[path] = worker
+
+        removed = False
+        for path in list(self._tester_workers.keys()):
+            if path not in current_paths:
+                del self._tester_workers[path]
+                removed = True
+
+        if removed:
+            self.testerDevicesChanged.emit()
+
+    @Property(dict, notify=configChanged)
+    def config(self):
+        return self._config_manager.config
+
+    @Property(str, notify=logsChanged)
+    def logs(self):
+        return self._filtered_logs
+
+    @Property(bool, notify=serviceActiveChanged)
+    def serviceActive(self):
+        return self._service_active
+
+    @Property(list, notify=diagnosticIssuesChanged)
+    def diagnosticIssues(self):
+        return self._diag_issues
+
+    @Slot()
+    def runDiagnostics(self):
+        logger.info("Running system diagnostics...")
+        self._diag_issues = self._diag_system.run_all_checks()
+        self.diagnosticIssuesChanged.emit()
+        logger.info(
+            f"Diagnostics complete. Found {len(self._diag_issues)} issues."
+        )
+
+    @Slot(str)
+    def applyDiagnosticFix(self, issue_id):
+        logger.info(f"User requested fix for issue: {issue_id}")
+        success, message = self._diag_system.apply_fix(issue_id)
+        self.fixCompleted.emit(success, message)
+        if success:
+            # Re-run diagnostics to update the list
+            QTimer.singleShot(1000, self.runDiagnostics)
+
+    @Slot()
+    def fixAllIssues(self):
+        logger.info("User requested to fix all issues.")
+        success, message = self._diag_system.fix_all()
+        self.fixCompleted.emit(success, message)
+        if success:
+            QTimer.singleShot(1000, self.runDiagnostics)
+
+    @Slot()
+    def revertSystemChanges(self):
+        logger.info("User requested to revert system changes.")
+        success, message = self._diag_system.revert_changes()
+        self.fixCompleted.emit(success, message)
+        if success:
+            QTimer.singleShot(1000, self.runDiagnostics)
+
+    @Slot(str, bool)
+    def toggleController(self, path, active):
+        if (not self._is_observer and self._manager and
+                path in self._manager.controllers):
+            c = self._manager.controllers[path]
+            if active:
+                c.start()
+            else:
+                c.stop()
+            self.controllersChanged.emit()
+
+    @Slot(bool)
+    def toggleService(self, active):
+        cmd = ["pkexec", "systemctl", "start" if active else "stop",
+               "pnp.service"]
+        threading.Thread(
+            target=lambda: subprocess.run(cmd, check=False),
+            daemon=True
+        ).start()
+
+    @Slot(str, 'QVariant')
+    def updateConfig(self, key, value):
+        self._config_manager.config[key] = value
+        self.configChanged.emit()
+
+    @Slot(str, str)
+    def updateMapping(self, key, value):
+        if 'mapping' not in self._config_manager.config:
+            self._config_manager.config['mapping'] = {}
+        self._config_manager.config['mapping'][key] = value
+        self.configChanged.emit()
+
+    @Slot()
+    def saveConfig(self):
+        self._config_manager.save_config()
+        logger.info(
+            "Config: Settings saved to " + self._config_manager.config_path
+        )
+
+    @Slot(str)
+    def loadProfile(self, profile_name):
+        logger.info(f"Config: Loading profile '{profile_name}'...")
+        # In a real app, this would load a specific .jsonc file
+        # For now, we simulate success
+        QTimer.singleShot(
+            500, lambda: logger.info(f"Config: Profile '{profile_name}' loaded.")
+        )
+
+    @Slot(str)
+    def saveProfile(self, profile_name):
+        logger.info(
+            f"Config: Saving current settings as profile '{profile_name}'..."
+        )
+        # Simulate saving to a new file
+        QTimer.singleShot(
+            500, lambda: logger.info(f"Config: Profile '{profile_name}' saved.")
+        )
+
+    @Slot()
+    def clearLogs(self):
+        self._logs = []
+        self._update_filtered_logs()
+
+    @Slot(str)
+    def setLogLevelFilter(self, level):
+        self._log_level_filter = level
+        self._update_filtered_logs()
+
+    @Slot(str)
+    def setLogModuleFilter(self, module):
+        self._log_module_filter = module
+        self._update_filtered_logs()
+
+    @Slot(str)
+    def appendLog(self, message):
+        # Ensure thread safety by using a single-shot timer to call
+        # the internal update
+        QTimer.singleShot(0, lambda: self._append_log_internal(message))
+
+    def _append_log_internal(self, message):
+        # Parse message to extract level and module
+        parts = message.split('|', 2)
+        level = "INFO"
+        content = message
+        if len(parts) >= 2:
+            level = parts[1].strip()
+            content = parts[2].strip()
+
+        module = "System"
+        if ':' in content:
+            mod_part = content.split(':', 1)[0].strip()
+            if mod_part in ["USB", "Steam", "Mapping", "System", "GUI"]:
+                module = mod_part
+
+        self._logs.append({
+            "full": message,
+            "level": level,
+            "module": module
+        })
+
+        if len(self._logs) > 1000:
+            self._logs.pop(0)
+
+        self._update_filtered_logs()
+
+    def _update_filtered_logs(self):
+        filtered = []
+        for entry in self._logs:
+            if (self._log_level_filter != "All" and
+                    entry["level"] != self._log_level_filter):
+                continue
+            if (self._log_module_filter != "All" and
+                    entry["module"] != self._log_module_filter):
+                continue
+            filtered.append(entry["full"])
+
+        self._filtered_logs = "".join(filtered)
+        self.logsChanged.emit()
+
+    @Slot()
+    def syncWithSteam(self):
+        logger.info("Steam: Explicit synchronization triggered.")
+        try:
+            subprocess.run(
+                ["steam", "steam://reloadcontrollerconfigs"],
+                check=False
+            )
+        except Exception:
+            pass
+
+    @Slot()
+    def connectToSteam(self):
+        logger.info("Steam: Attempting to connect to Steam...")
+        try:
+            subprocess.run(["steam", "steam://open/main"], check=False)
+        except Exception:
+            pass
